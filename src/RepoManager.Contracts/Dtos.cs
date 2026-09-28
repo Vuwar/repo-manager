@@ -151,6 +151,9 @@ public sealed record ResolveResultDto
 
 public sealed record ScanResultDto(string Path, string Name, bool Registered, IReadOnlyList<string> Markers);
 
+/// <summary>A folder inside a checkout: "/"-separated path relative to its root ("." = root), plus project files found in it.</summary>
+public sealed record FolderDto(string Path, IReadOnlyList<string> Markers);
+
 public sealed record ConfigFieldDto(string Field, string? Value, string Origin);
 
 public sealed record EffectiveServiceDto(string Name, IReadOnlyList<ConfigFieldDto> Fields);

@@ -205,4 +205,25 @@ public class ConfigTests
         Assert.Null(w);
         Assert.False(Ids.TryParse("api", out _, out _, out _));
     }
+
+    [Fact]
+    public void Folder_list_skips_hidden_and_build_folders_and_marks_projects()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rm-tests", "f-" + Guid.NewGuid().ToString("N")[..8]);
+        foreach (var d in new[] { "src/Api/bin/Debug", "src/Api/obj", "web/node_modules/x", ".git/objects", "docs" })
+            Directory.CreateDirectory(Path.Combine(dir, d));
+        File.WriteAllText(Path.Combine(dir, "src", "Api", "Api.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(dir, "web", "package.json"), "{}");
+        File.WriteAllText(Path.Combine(dir, "App.sln"), "");
+        try
+        {
+            var list = FolderLister.List(dir);
+            Assert.Equal([".", "docs", "src", "src/Api", "web"], list.Select(f => f.Path));
+            Assert.Equal(["sln"], list[0].Markers);
+            Assert.Equal(["csproj"], list.Single(f => f.Path == "src/Api").Markers);
+            Assert.Equal(["package.json"], list.Single(f => f.Path == "web").Markers);
+            Assert.Empty(FolderLister.List(Path.Combine(dir, "missing")));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

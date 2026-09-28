@@ -223,6 +223,12 @@ public static class Api
             return inst == null ? Results.NotFound(ActionResultDto.Fail($"unknown instance '{instance}'")) : Results.Ok(Views.Config(d, inst));
         });
 
+        api.MapGet("/folders", (string instance) =>
+        {
+            var inst = d.Config.FindInstance(instance);
+            return inst == null ? Results.NotFound(ActionResultDto.Fail($"unknown instance '{instance}'")) : Results.Ok(FolderLister.List(inst.Root));
+        });
+
         api.MapPost("/open", (OpenRequest req) => Views.Open(d, req));
 
         api.MapPost("/hook", (HookRequest req) => HookPolicy.Evaluate(req, Views.HookSnapshot(sup)));
