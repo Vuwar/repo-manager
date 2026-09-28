@@ -97,4 +97,11 @@ describe('reducer', () => {
     s = reducer(s, { type: 'projectsLoaded', projects: sampleProjects().slice(0, 1) });
     expect(s.view).toEqual({ kind: 'instance', key: 'panel-pro' });
   });
+
+  it('openConfig selects the instance, shows its config tab and counts the request', () => {
+    const s = reducer(loaded(), { type: 'openConfig', instance: 'panel-pro@feat-x' });
+    expect(s.view).toEqual({ kind: 'instance', key: 'panel-pro@feat-x' });
+    expect(s.tab).toBe('config');
+    expect(s.configRequests).toBe(1);
+  });
 });

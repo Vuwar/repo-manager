@@ -89,7 +89,11 @@ export interface ActionResultDto {
   error?: string;
   affected: string[];
   logTail: string[];
+  /** Follow-ups that can fix a failed start. */
+  fixes?: StartFix[];
 }
+
+export type StartFix = 'kill-owner' | 'new-port' | 'force' | 'edit-config';
 
 export interface PortDto {
   port: number;
@@ -171,6 +175,7 @@ export interface ServiceActionRequest {
   cwd?: string;
   killOwner?: boolean;
   force?: boolean;
+  newPort?: boolean;
 }
 
 export interface InstanceActionRequest {

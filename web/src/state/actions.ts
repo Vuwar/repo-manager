@@ -88,7 +88,9 @@ export async function run(opts: RunOptions, fn: () => Promise<ActionResultDto>):
 
 export type ServiceVerb = 'start' | 'stop' | 'restart';
 
-export function serviceAction(verb: ServiceVerb, id: string, flags: { killOwner?: boolean; force?: boolean } = {}) {
+type ServiceFlags = { killOwner?: boolean; force?: boolean; newPort?: boolean };
+
+export function serviceAction(verb: ServiceVerb, id: string, flags: ServiceFlags = {}) {
   const fn = verb === 'start' ? api.startService : verb === 'stop' ? api.stopService : api.restartService;
   const label = verb === 'start' ? 'Starting' : verb === 'stop' ? 'Stopping' : 'Restarting';
   return run(
@@ -103,15 +105,21 @@ export function serviceAction(verb: ServiceVerb, id: string, flags: { killOwner?
   );
 }
 
-/** Offers the obvious follow-ups for common start failures (port owned elsewhere, worktree not ready). */
-function retryActions(verb: ServiceVerb, id: string, r: ActionResultDto): ToastAction[] | undefined {
-  const text = (r.error ?? '').toLowerCase();
+/** Buttons for the fixes the daemon says can help a failed start (port owned elsewhere, port ignored, worktree not ready). */
+export function retryActions(verb: ServiceVerb, id: string, r: ActionResultDto): ToastAction[] | undefined {
   const actions: ToastAction[] = [];
-  if (/(port|in use|owned|owner|pid)/.test(text) && !/already running as/.test(text))
-    actions.push({ label: 'Kill owner & retry', run: () => void serviceAction(verb, id, { killOwner: true }) });
-  if (/worktree/.test(text) || /--force/.test(text))
-    actions.push({ label: 'Force start', run: () => void serviceAction(verb, id, { force: true }) });
+  for (const fix of r.fixes ?? []) {
+    if (fix === 'kill-owner') actions.push({ label: 'Kill owner & retry', run: () => void serviceAction(verb, id, { killOwner: true }) });
+    else if (fix === 'new-port') actions.push({ label: 'Start on new port', run: () => void serviceAction(verb, id, { newPort: true }) });
+    else if (fix === 'force') actions.push({ label: 'Force start', run: () => void serviceAction(verb, id, { force: true }) });
+    else if (fix === 'edit-config') actions.push({ label: 'Edit config', run: () => openConfig(id) });
+  }
   return actions.length ? actions : undefined;
+}
+
+/** Shows the config tab of the checkout a service id ("project[@worktree]/service") belongs to. */
+export function openConfig(serviceId: string): void {
+  dispatch({ type: 'openConfig', instance: serviceId.slice(0, serviceId.lastIndexOf('/')) });
 }
 
 export function instanceAction(verb: 'start' | 'stop', instance: string) {

@@ -36,6 +36,8 @@ export interface AppState {
   /** In-flight actions: key (service id, "instance:<key>", "group:<tag>", ...) -> label. */
   pending: Record<string, string>;
   toasts: Toast[];
+  /** Bumped by "openConfig", so a view that has no config tab (simple mode) can switch to one. */
+  configRequests: number;
 }
 
 export type Action =
@@ -49,6 +51,7 @@ export type Action =
   | { type: 'selectInstance'; key: string }
   | { type: 'showPorts' }
   | { type: 'setTab'; tab: ProjectTab }
+  | { type: 'openConfig'; instance: string }
   | { type: 'setLogSources'; sources: string[] }
   | { type: 'connection'; state: Connection }
   | { type: 'daemon'; info: DaemonInfoDto }
@@ -70,6 +73,7 @@ export function initialState(persistedInstance?: string | null): AppState {
     logs: {},
     pending: {},
     toasts: [],
+    configRequests: 0,
   };
 }
 
@@ -205,6 +209,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, view: { kind: 'ports' } };
     case 'setTab':
       return { ...state, tab: action.tab };
+    case 'openConfig':
+      return { ...selectInstance(state, action.instance), tab: 'config', configRequests: state.configRequests + 1 };
     case 'setLogSources': {
       const uniq = Array.from(new Set(action.sources));
       return withSources(state, uniq);
