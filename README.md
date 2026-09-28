@@ -1,5 +1,6 @@
 # RepoManager
 
+[![CI](https://github.com/Vuwar/repo-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Vuwar/repo-manager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/Vuwar/repo-manager)](LICENSE)
 
 One place that owns every dev server on your Windows machine. Start, stop, restart and read logs from a tray app,
