@@ -18,6 +18,9 @@ internal static class Program
     {
         var background = args.Contains("--background", StringComparer.OrdinalIgnoreCase);
         var headless = args.Contains("--headless", StringComparer.OrdinalIgnoreCase);
+        // --home / --port override REPOMANAGER_HOME / REPOMANAGER_PORT (devm passes them when it starts the app detached).
+        if (Option(args, "--home") is { } homeArg) Environment.SetEnvironmentVariable("REPOMANAGER_HOME", homeArg);
+        if (Option(args, "--port") is { } portArg) Environment.SetEnvironmentVariable("REPOMANAGER_PORT", portArg);
         var dataDir = Protocol.DataDir();
         var port = int.TryParse(Environment.GetEnvironmentVariable("REPOMANAGER_PORT"), out var p) ? p : Protocol.DefaultPort;
 
@@ -78,6 +81,12 @@ internal static class Program
         {
             // Starting up or shutting down; nothing useful to do.
         }
+    }
+
+    private static string? Option(string[] args, string name)
+    {
+        var i = Array.FindIndex(args, a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
 
     private static string StableHash(string s)

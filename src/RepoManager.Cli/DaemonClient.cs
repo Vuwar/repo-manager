@@ -23,7 +23,7 @@ public sealed class DaemonClient : IDisposable
 
         var exe = FindAppExe() ?? throw new DaemonUnavailableException(
             "RepoManager is not running and RepoManager.exe was not found next to devm.exe. Start RepoManager, or set REPOMANAGER_EXE.");
-        Process.Start(new ProcessStartInfo(exe, "--background") { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! });
+        LaunchDetached(exe);
 
         var until = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
         while (DateTime.UtcNow < until)
@@ -52,6 +52,53 @@ public sealed class DaemonClient : IDisposable
             _http?.Dispose();
             _http = http;
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Starts RepoManager outside the caller's Job Object. devm often runs inside a tool's shell (Claude Code, an IDE
+    /// terminal) whose job kills everything when the shell closes; the daemon must outlive it.
+    /// Order: the installed Task Scheduler task, then WMI Win32_Process.Create (created by the WMI service, so in no
+    /// job of ours), then a plain start.
+    /// </summary>
+    private static void LaunchDetached(string exe)
+    {
+        // A detached process does not inherit this environment, so overrides travel as arguments.
+        var home = Environment.GetEnvironmentVariable("REPOMANAGER_HOME");
+        var port = Environment.GetEnvironmentVariable("REPOMANAGER_PORT");
+        var extra = (string.IsNullOrWhiteSpace(home) ? "" : $" --home \"{home}\"") + (string.IsNullOrWhiteSpace(port) ? "" : $" --port {port}");
+        var installed = Path.Combine(Protocol.DataDir(), "bin", "RepoManager.exe");
+        if (extra.Length == 0 && string.Equals(Path.GetFullPath(exe), Path.GetFullPath(installed), StringComparison.OrdinalIgnoreCase) && RunTask()) return;
+        try
+        {
+            using var cls = new System.Management.ManagementClass("Win32_Process");
+            using var args = cls.GetMethodParameters("Create");
+            args["CommandLine"] = $"\"{exe}\" --background{extra}";
+            args["CurrentDirectory"] = Path.GetDirectoryName(exe);
+            using var result = cls.InvokeMethod("Create", args, null);
+            if (Convert.ToInt32(result["ReturnValue"]) == 0) return;
+        }
+        catch { /* WMI unavailable */ }
+        Process.Start(new ProcessStartInfo(exe, "--background" + extra) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! });
+    }
+
+    private static bool RunTask()
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo("schtasks.exe", "/run /tn RepoManager")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            })!;
+            p.WaitForExit(5000);
+            return p.ExitCode == 0;
         }
         catch
         {
