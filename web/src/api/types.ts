@@ -124,6 +124,12 @@ export interface ResolveResultDto {
   error?: string;
 }
 
+/** Folder inside a checkout: "/"-separated path relative to its root ("." = root), plus project files found in it. */
+export interface FolderDto {
+  path: string;
+  markers: string[];
+}
+
 export interface ScanResultDto {
   path: string;
   name: string;

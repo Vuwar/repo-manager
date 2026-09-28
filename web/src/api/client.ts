@@ -2,6 +2,7 @@ import type {
   ActionResultDto,
   DaemonInfoDto,
   EffectiveConfigDto,
+  FolderDto,
   GroupActionRequest,
   InstanceActionRequest,
   LogLineDto,
@@ -128,6 +129,8 @@ export const api = {
 
   config: (instance: string, signal?: AbortSignal) =>
     request<EffectiveConfigDto>('GET', '/api/config' + qs({ instance }), undefined, signal),
+
+  folders: (instance: string, signal?: AbortSignal) => request<FolderDto[]>('GET', '/api/folders' + qs({ instance }), undefined, signal),
 
   open: (instance: string, tool: OpenTool) => action('/api/open', { instance, tool }),
   refresh: () => action('/api/refresh', {}),
