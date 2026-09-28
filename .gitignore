@@ -34,6 +34,8 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+# Source folder, not log output.
+!src/RepoManager.Core/Logs/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
