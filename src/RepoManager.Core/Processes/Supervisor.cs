@@ -16,6 +16,7 @@ public sealed class SupervisorOptions
     public int HealthFailuresForUnhealthy { get; init; } = 3;
     public TimeSpan UnhealthyNotifyAfter { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan AliveGrace { get; init; } = TimeSpan.FromSeconds(3);
+    public TimeSpan PortDetectTimeout { get; init; } = TimeSpan.FromMinutes(10);
     public int CrashLimit { get; init; } = 5;
     public TimeSpan CrashWindow { get; init; } = TimeSpan.FromSeconds(60);
     public Func<int, TimeSpan> Backoff { get; init; } = n => TimeSpan.FromSeconds(Math.Min(16, Math.Pow(2, n)));
@@ -371,6 +372,7 @@ public sealed class Supervisor : IDisposable
             _state.SetDesired(r.Id, true);
             r.Log.Append(LogStream.Sys, $"--- {r.Id} is running{(r.Url != null ? " at " + r.Url : "")} ---");
             if (cfg.Health != null) _ = HealthLoopAsync(r, proc, Variables.Resolve(cfg.Health, ctx), token);
+            if (r.Port == null) _ = DetectPortAsync(r, proc, token);
             return ActionResultDto.Success($"{r.Id} running{(r.Url != null ? " at " + r.Url : "")}", r.Id);
         }
         catch (OperationCanceledException)
@@ -628,6 +630,38 @@ public sealed class Supervisor : IDisposable
         }
         catch (OperationCanceledException) { }
     }
+
+    /// <summary>
+    /// Services without a configured port (e.g. `dotnet run` using launchSettings.json) still listen somewhere:
+    /// watch the process tree and show the first port it opens. Gives up after a while for services that never listen.
+    /// </summary>
+    private async Task DetectPortAsync(ServiceRunner r, ManagedProcess proc, CancellationToken token)
+    {
+        var started = DateTime.UtcNow;
+        try
+        {
+            while (!token.IsCancellationRequested && r.Process == proc && r.IsUp && r.Port == null)
+            {
+                var port = PickListeningPort(PortInspector.Listening(), new HashSet<int>(proc.TreePids()) { proc.Pid });
+                if (port != null)
+                {
+                    r.Port = port;
+                    r.Url ??= $"http://localhost:{port}";
+                    r.Log.Append(LogStream.Sys, $"--- {r.Id} is listening on port {port} ---");
+                    try { ServiceChanged?.Invoke(ToDto(r)); } catch { /* listeners must not break the supervisor */ }
+                    return;
+                }
+                var elapsed = DateTime.UtcNow - started;
+                if (elapsed > _options.PortDetectTimeout) return;
+                await Task.Delay(elapsed < TimeSpan.FromSeconds(30) ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(2), token);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    /// <summary>Lowest port a process of the tree listens on, or null.</summary>
+    public static int? PickListeningPort(IEnumerable<ListeningPort> listening, IReadOnlySet<int> pids) =>
+        listening.Where(l => pids.Contains(l.Pid)).Select(l => (int?)l.Port).Min();
 
     private async Task WatchExitAsync(ServiceRunner r, ManagedProcess proc)
     {

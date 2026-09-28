@@ -65,6 +65,28 @@ public class SupervisorTests
     }
 
     [Fact]
+    public async Task Port_of_a_service_without_port_config_is_detected()
+    {
+        var port = TestEnv.FreePort();
+        using var h = new Harness(Services(new { api = Harness.Fake($"--port {port} --delay-listen 1") }));
+
+        var res = await h.Supervisor.StartAsync(h.Id("api"));
+        Assert.True(res.Ok, res.Error);
+        var r = h.Supervisor.Find(h.Id("api"))!;
+        Assert.True(await TestEnv.Eventually(() => r.Port == port), $"port {r.Port}");
+        Assert.Equal($"http://localhost:{port}", r.Url);
+        Assert.Equal(port, h.Supervisor.ToDto(r).Port);
+    }
+
+    [Fact]
+    public void Lowest_port_of_the_tree_is_picked()
+    {
+        var listening = new[] { new ListeningPort(9229, 10, "127.0.0.1"), new ListeningPort(5159, 11, "127.0.0.1"), new ListeningPort(80, 99, "0.0.0.0") };
+        Assert.Equal(5159, Supervisor.PickListeningPort(listening, new HashSet<int> { 10, 11 }));
+        Assert.Null(Supervisor.PickListeningPort(listening, new HashSet<int> { 12 }));
+    }
+
+    [Fact]
     public async Task External_port_owner_is_reported_and_can_be_killed()
     {
         var port = TestEnv.FreePort();
