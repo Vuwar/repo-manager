@@ -44,9 +44,10 @@ function instanceLabel(inst: InstanceDto): string {
 interface Props {
   onAddProject: () => void;
   onNavigate: () => void;
+  onSimpleView: () => void;
 }
 
-export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ onAddProject, onNavigate }, filterRef) {
+export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ onAddProject, onNavigate, onSimpleView }, filterRef) {
   const projects = useAppState((s) => s.projects);
   const view = useAppState((s) => s.view);
   const pending = useAppState((s) => s.pending);
@@ -113,6 +114,7 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
           <span className="brand-name">RepoManager</span>
         </div>
         <div className="side-actions">
+          <Button size="sm" variant="ghost" icon="simple" title="Simple view: find and start services" aria-label="Simple view" onClick={onSimpleView} />
           <Button size="sm" variant="ghost" icon="plus" title="Add project" aria-label="Add project" onClick={onAddProject} />
           <Button
             size="sm"

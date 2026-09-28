@@ -117,6 +117,12 @@ const PATHS = {
       <path d="m3 13 9 5 9-5" />
     </>
   ),
+  simple: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 9h17M9.5 13.5l2 1.5-2 1.5" />
+    </>
+  ),
   dot: <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />,
 } as const;
 

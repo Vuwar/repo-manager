@@ -2458,3 +2458,455 @@ details.advanced[open] {
   white-space: nowrap;
   text-align: left;
 }
+
+/* ---------- Simple view ---------- */
+/* One job: find a service, start it, stop it. Each service row carries a status lamp on its left edge. */
+
+.simple {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.sv-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 560px) 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  background: var(--bg-sidebar);
+}
+
+.sv-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-3);
+  transition: border-color 0.12s;
+}
+.sv-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sv-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.sv-search input::placeholder {
+  color: var(--text-3);
+}
+.sv-hint {
+  font-size: 12px;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+
+.sv-head-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.sv-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+/* Tabs */
+.sv-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex: none;
+}
+.sv-tab {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 36px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-2);
+  margin-bottom: -1px;
+}
+.sv-tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.sv-tab.on {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.sv-tab-all,
+.sv-tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 6px 0 14px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  border-radius: inherit;
+}
+.sv-tabs .sv-tab-all {
+  padding-right: 14px;
+}
+.sv-tabs .sv-tab-all.on {
+  background: var(--bg);
+}
+.sv-tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+.sv-tab-x {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.sv-tab-x:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* Body */
+.sv-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.simple > .global-error {
+  margin: 12px 20px 0;
+}
+.sv-panel {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+.sv-repo-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 18px;
+  min-width: 0;
+}
+.sv-repo-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+.sv-root {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sv-instance + .sv-instance,
+.sv-more {
+  margin-top: 26px;
+}
+.sv-instance-head,
+.sv-hit-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  margin-bottom: 8px;
+}
+.sv-instance-head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.sv-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-instance-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.sv-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  cursor: pointer;
+  list-style: none;
+  font-size: 12.5px;
+}
+.sv-more > summary::-webkit-details-marker {
+  display: none;
+}
+.sv-more > summary:hover {
+  color: var(--text);
+}
+.sv-more[open] > summary .icon {
+  transform: rotate(180deg);
+}
+.sv-more > .sv-instance {
+  margin-top: 18px;
+}
+
+/* Service rows */
+.sv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.sv-row {
+  --lamp: var(--off);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 10px 12px 10px 22px;
+}
+.sv-row + .sv-row {
+  border-top: 1px solid var(--border-soft);
+}
+.sv-row.sv-ok {
+  --lamp: var(--ok);
+  background: linear-gradient(90deg, var(--ok-soft), transparent 40%);
+}
+.sv-row.sv-warn {
+  --lamp: var(--warn);
+  background: linear-gradient(90deg, var(--warn-soft), transparent 40%);
+}
+.sv-row.sv-bad {
+  --lamp: var(--bad);
+  background: linear-gradient(90deg, var(--bad-soft), transparent 40%);
+}
+.sv-row.sv-busy {
+  --lamp: var(--busy);
+}
+.sv-lamp {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--lamp);
+  opacity: 0.35;
+}
+.sv-ok .sv-lamp,
+.sv-bad .sv-lamp,
+.sv-warn .sv-lamp {
+  opacity: 1;
+  box-shadow: 0 0 12px 1px var(--lamp);
+}
+.sv-busy .sv-lamp {
+  opacity: 1;
+  animation: sv-breathe 1.2s ease-in-out infinite;
+}
+@keyframes sv-breathe {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.sv-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.sv-name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-status {
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv-status-ok {
+  color: var(--ok);
+}
+.sv-status-warn {
+  color: var(--warn);
+}
+.sv-status-bad {
+  color: var(--bad);
+}
+.sv-status-busy {
+  color: var(--busy);
+}
+
+.sv-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.sv-open {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent-text);
+}
+.sv-notready {
+  display: inline-flex;
+  color: var(--warn);
+  padding: 0 4px;
+}
+.sv-go {
+  height: 34px;
+  min-width: 92px;
+  margin-left: 6px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.sv-go-start {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sv-go-start:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.sv-go-stop {
+  background: transparent;
+}
+.sv-go-stop .icon {
+  color: var(--bad);
+}
+
+/* Finder */
+.sv-hit + .sv-hit {
+  margin-top: 24px;
+}
+.sv-hit-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.sv-hit-name:hover {
+  color: var(--accent-text);
+}
+.sv-hit-wt {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.sv-none {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-3);
+}
+.sv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 80px 24px;
+  color: var(--text-2);
+  font-size: 14px;
+  text-align: center;
+}
+.sv-empty p {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .sv-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+  .sv-head .brand,
+  .sv-hint,
+  .sv-search .kbd {
+    display: none;
+  }
+  .sv-panel {
+    padding: 20px 16px 40px;
+  }
+  .sv-root {
+    display: none;
+  }
+  .sv-row {
+    flex-wrap: wrap;
+    padding-left: 18px;
+  }
+  .sv-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

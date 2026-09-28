@@ -12,9 +12,11 @@ import { handleEvent, loadDaemonInfo, loadLogHistory, loadProjects } from './sta
 import { findInstance } from './state/reducer';
 import { dispatch, useAppState } from './state/store';
 import { shortName } from './lib/format';
+import { readMode, saveMode, type UiMode } from './lib/simple';
 import { NoToken } from './views/NoToken';
 import { PortsView } from './views/PortsView';
 import { NoInstance, ProjectView } from './views/ProjectView';
+import { SimpleView } from './views/SimpleView';
 
 export function App() {
   const [token] = useState(initToken);
@@ -37,6 +39,16 @@ function Shell({ token }: { token: string }) {
   const logSources = useAppState((s) => s.logSources);
   const [addOpen, setAddOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [mode, setModeState] = useState<UiMode>(readMode);
+  const setMode = (m: UiMode) => {
+    saveMode(m);
+    setModeState(m);
+  };
+  const configRequests = useAppState((s) => s.configRequests);
+  // "Edit config" (e.g. from a failed-start toast) needs the full view: simple mode has no config tab.
+  useEffect(() => {
+    if (configRequests > 0) setMode('full');
+  }, [configRequests]);
   const filterRef = useRef<HTMLInputElement>(null);
   const [ready] = useState(() => {
     configureApi(token, () => dispatch({ type: 'authFailed' }));
@@ -87,8 +99,9 @@ function Shell({ token }: { token: string }) {
     loaded.current = now;
   }, [logSources]);
 
-  // Ctrl+K or "/" focuses the sidebar quick filter.
+  // Ctrl+K or "/" focuses the sidebar quick filter (simple mode has its own search).
   useEffect(() => {
+    if (mode === 'simple') return;
     const onKey = (e: KeyboardEvent) => {
       const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
       const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target);
@@ -103,7 +116,7 @@ function Shell({ token }: { token: string }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     if (!drawer) return;
@@ -123,6 +136,8 @@ function Shell({ token }: { token: string }) {
     };
   }, [current]);
 
+  if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} />;
+
   let main;
   if (view.kind === 'ports') main = <PortsView />;
   else if (projects === null && !projectsError) main = <div className="project-view" />;
@@ -131,7 +146,7 @@ function Shell({ token }: { token: string }) {
 
   return (
     <div className={`app${drawer ? ' drawer-open' : ''}`}>
-      <Sidebar ref={filterRef} onAddProject={() => setAddOpen(true)} onNavigate={() => setDrawer(false)} />
+      <Sidebar ref={filterRef} onAddProject={() => setAddOpen(true)} onNavigate={() => setDrawer(false)} onSimpleView={() => setMode('simple')} />
       <div className="drawer-scrim" onClick={() => setDrawer(false)} />
       <main className="main">
         <div className="topbar">
