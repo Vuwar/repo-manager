@@ -135,3 +135,7 @@ move the data folder and API port (useful for a second, test instance).
 | `src/RepoManager.Contracts` | API DTOs |
 | `web/` | React UI (builds into `src/RepoManager.App/wwwroot`) |
 | `tests/` | xUnit tests and `FakeServer`, a scriptable fake dev server |
+
+## License
+
+[MIT](LICENSE)
