@@ -138,7 +138,9 @@ Resolved at start time, after ports are decided:
 
 ### 5.5 Validation
 
-Runs on load and on every file change (file watcher). Errors: invalid JSON, unknown `dependsOn` target, dependency cycle, unknown variable, the same fixed port used by two services on the machine. A project with errors is marked invalid and cannot start; other projects are not affected. Errors show in the UI banner and in `devm status`.
+Runs on load and on every file change (file watcher). Errors: invalid JSON, missing command, unknown `dependsOn` target, dependency cycle, unknown variable, `${port:x}` pointing at a service without a port. A project with errors is marked invalid and cannot start; other projects are not affected. Errors show in the UI banner and in `devm status`.
+
+The same fixed port used by two main checkouts is a **warning**, not an error: old and new copies of one app (e.g. `product-catalogue` and `product-catalogue-new`) often share a port and are never run together. The start-time port check (§6.6) still stops a real clash.
 
 ### 5.6 Discovery
 
@@ -157,8 +159,9 @@ Runs on load and on every file change (file watcher). Errors: invalid JSON, unkn
 
 ### 6.2 Job Objects
 
-- The daemon creates a root Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. If the daemon exits or crashes, Windows kills every process in it.
-- Each service runs in its own nested job. Stop = terminate that job, which kills the full tree (`dotnet run` → `PanelPro.Api.exe`, `npm` → `node`).
+- Each service (and each prepare step and task) runs in its own Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Only the daemon holds the job handles, so if the daemon exits or crashes, Windows closes them and kills every process in every job. (Implementation note: this gives the same guarantee as one root job without putting the daemon itself in a kill-on-close job.)
+- The process is created suspended and joins its job before it runs, so no child can escape. Only its own pipe handles are inherited (`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`).
+- Stop = terminate the job, which kills the full tree (`dotnet run` → `PanelPro.Api.exe`, `npm` → `node`), then wait until the tree is gone and the port is released.
 - Stop is immediate termination. Dev servers do not need a graceful shutdown.
 
 ### 6.3 States
@@ -205,7 +208,7 @@ Fixed port from config by default. `autoPort: true` → use the configured port 
 
 ### 6.11 Restore
 
-`state.json` stores which instances and services the user wants running. On daemon start, those are started again (respecting `dependsOn`). A user stop removes the service from the desired state; a crash does not.
+`state.json` stores which instances and services the user wants running. On daemon start, those are started again (respecting `dependsOn`). A user stop removes the service from the desired state; a crash does not. Quitting RepoManager (tray Quit, or the installer updating it) stops the services but keeps the desired state, so they come back on the next start; the quit dialog says so.
 
 ### 6.12 Tasks
 
@@ -227,9 +230,14 @@ devm url <svc>
 devm ports
 devm add <path>
 devm scan <dir>
+devm open vscode|rider|explorer|terminal
+devm ui
 devm mcp
 devm hook
+devm claude-setup [--no-mcp] / devm claude-remove [--no-mcp]
 ```
+
+A full id (`project/svc`, `project@worktree/svc`) is always taken literally: `shop/api` means the main checkout even when run inside a worktree. Short names resolve against the checkout that contains the current folder.
 
 Every command accepts `--json`. Exit codes: 0 success, 1 error, 2 service failed to start (the last 50 log lines are printed).
 
@@ -291,9 +299,9 @@ Windows toast on crash, on `Failed`, and on `Unhealthy` longer than 30 s. Toggle
 `install.ps1`:
 - Publishes or copies `RepoManager.exe` and `devm.exe` to `%LOCALAPPDATA%\RepoManager\bin`.
 - Creates a Start Menu shortcut.
-- Optionally registers autostart at login (Task Scheduler, starts with `--background`, tray only).
+- Optionally registers autostart at login (Task Scheduler, starts with `--background`, tray only; falls back to the HKCU `Run` key when task registration is not allowed).
 - Adds the `bin` folder to the user `PATH`.
-- Registers the MCP server (`claude mcp add --scope user devm -- devm mcp`) and the PreToolUse hook in `~/.claude/settings.json`, after taking a backup of the file.
+- Runs `devm claude-setup`, which registers the MCP server (`claude mcp add --scope user repomanager -- <bin>\devm.exe mcp`) and the PreToolUse hook in `~/.claude/settings.json` (backup taken first; comments in that file are not preserved), and writes the `CLAUDE.md` block. The JSON edits are done in C# rather than PowerShell so the rest of the file keeps its shape.
 - Adds the `CLAUDE.md` block (§7.4).
 - Rerunning the script updates in place. `uninstall.ps1` reverts every step.
 

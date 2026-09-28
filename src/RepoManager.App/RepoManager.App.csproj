@@ -10,8 +10,7 @@
     <RootNamespace>RepoManager.App</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
-    <Version>1.0.0</Version>
-  </PropertyGroup>
+    <Version>1.0.0</Version>  </PropertyGroup>
 
   <!-- Self-contained single-file publish (install.ps1): dotnet publish -c Release -p:PublishSingle=true -->
   <PropertyGroup Condition="'$(PublishSingle)' == 'true'">

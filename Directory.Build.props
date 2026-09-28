@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- The WebView2 package also references its WPF assembly; harmless in this WinForms app. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+</Project>

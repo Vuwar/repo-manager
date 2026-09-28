@@ -26,6 +26,8 @@ public static class Cli
           devm ui                                  show the RepoManager window
           devm mcp                                 MCP server over stdio (for Claude Code)
           devm hook                                Claude Code PreToolUse hook (reads JSON on stdin)
+          devm claude-setup [--no-mcp]             register MCP server, hook and CLAUDE.md block
+          devm claude-remove [--no-mcp]            undo claude-setup
 
         Full ids work anywhere: project/service, project@worktree/service.
         Every command accepts --json.
@@ -45,6 +47,8 @@ public static class Cli
         if (cmd is "version" or "--version") { Console.WriteLine(Protocol.Version); return 0; }
         if (cmd == "hook") return await Hook.RunAsync();
         if (cmd == "mcp") return await Mcp.RunAsync(args.Skip(1).ToArray());
+        if (cmd == "claude-setup") return ClaudeIntegration.Setup(a.Value("devm") ?? Environment.ProcessPath!, a.Flag("no-mcp"));
+        if (cmd == "claude-remove") return ClaudeIntegration.Remove(a.Flag("no-mcp"));
 
         using var client = new DaemonClient();
         try
@@ -125,7 +129,9 @@ public static class Cli
                     s.State is ServiceState.Failed or ServiceState.Crashed ? s.LastError ?? "" : inst.Worktree != null && !s.WorktreeReady ? "not worktree-ready" : "",
                 ]);
         }
-        PrintTable(rows);
+        if (rows.Count > 1) PrintTable(rows);
+        foreach (var (_, inst) in instances.Where(x => x.Instance.Services.Count == 0))
+            Console.WriteLine($"{inst.Key}: no services defined (add .claude/launch.json or devservers.json, or define them in the app's Config tab)");
         foreach (var (project, _) in instances.DistinctBy(x => x.Project.Name))
             foreach (var e in project.Errors)
                 Console.WriteLine($"{project.Name}: {e}");
@@ -333,7 +339,7 @@ public sealed class Args
 {
     private readonly List<string> _positional = [];
     private readonly Dictionary<string, string?> _options = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase) { "tail", "since", "grep", "timeout" };
+    private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase) { "tail", "since", "grep", "timeout", "devm" };
 
     public Args(IEnumerable<string> args)
     {
