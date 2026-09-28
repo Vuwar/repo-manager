@@ -82,8 +82,19 @@ if (port is > 0)
             using (client)
             {
                 var stream = client.GetStream();
+                // A request can arrive in several reads: read until the end of its headers (or buffer full / EOF).
                 var buf = new byte[4096];
-                try { await stream.ReadAsync(buf); } catch { return; }
+                var read = 0;
+                try
+                {
+                    while (read < buf.Length && buf.AsSpan(0, read).IndexOf("\r\n\r\n"u8) < 0)
+                    {
+                        var n = await stream.ReadAsync(buf.AsMemory(read));
+                        if (n == 0) break;
+                        read += n;
+                    }
+                }
+                catch { return; }
                 var bad = unhealthyFile != null && File.Exists(unhealthyFile);
                 var body = bad ? "unhealthy" : "ok";
                 var resp = $"HTTP/1.1 {(bad ? "500 Internal Server Error" : "200 OK")}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}";
