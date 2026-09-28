@@ -1,7 +1,7 @@
 import { forwardRef, useMemo, useState, type KeyboardEvent } from 'react';
 import type { InstanceDto } from '../api/types';
 import { filterInstances, groupProjects, groupSummary } from '../lib/groups';
-import { groupAction, refreshAll } from '../state/actions';
+import { groupAction, instanceAction, refreshAll } from '../state/actions';
 import { dispatch, useAppState } from '../state/store';
 import { Icon } from './Icon';
 import { Button, Kbd, Spinner, StatusDot } from './ui';
@@ -74,6 +74,13 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
     onNavigate();
   };
 
+  // Double click on a project or worktree row starts all its enabled services.
+  const startAll = (inst: InstanceDto | undefined) => {
+    if (!inst || pending['instance:' + inst.key]) return;
+    if (!inst.services.some((s) => !s.disabled)) return;
+    void instanceAction('start', inst.key);
+  };
+
   const onFilterKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       setQuery('');
@@ -92,7 +99,8 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
       key={inst.key}
       className={`nav-item nav-instance nested${activeKey === inst.key ? ' active' : ''}`}
       onClick={() => go(inst.key)}
-      title={inst.root}
+      onDoubleClick={() => startAll(inst)}
+      title={`${inst.root}\nDouble click to start all services`}
     >
       {inst.worktree ? <Icon name="branch" size={12} /> : <span className="nav-bullet" />}
       <span className="nav-label">{instanceLabel(inst)}</span>
@@ -159,7 +167,10 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
               </div>
               {hits.map((h) => (
                 <div key={h.instance.key}>
-                  <button type="button" className={`nav-item nav-instance${activeKey === h.instance.key ? ' active' : ''}`} onClick={() => go(h.instance.key)}>
+                  <button type="button" className={`nav-item nav-instance${activeKey === h.instance.key ? ' active' : ''}`} onClick={() => go(h.instance.key)}
+                    onDoubleClick={() => startAll(h.instance)}
+                    title="Double click to start all services"
+                  >
                     {h.instance.worktree ? <Icon name="branch" size={12} /> : <span className="nav-bullet" />}
                     <span className="nav-label">
                       {h.project.name}
@@ -246,7 +257,10 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
                           >
                             {worktrees.length ? <Icon name={pCollapsed ? 'chevron' : 'chevronDown'} size={11} /> : null}
                           </button>
-                          <button type="button" className="proj-main" onClick={() => main && go(main.key)} title={p.root}>
+                          <button type="button" className="proj-main" onClick={() => main && go(main.key)}
+                            onDoubleClick={() => startAll(main)}
+                            title={`${p.root}\nDouble click to start all services`}
+                          >
                             <span className="nav-label proj-name">{p.name}</span>
                             {main?.git?.branch && (pCollapsed || !worktrees.length) && <span className="nav-branch">{main.git.branch}</span>}
                             {(bad || !p.valid) && <Icon name="alert" size={12} className="icon bad-text" />}
