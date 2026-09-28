@@ -1981,6 +1981,36 @@ mark.hl {
   box-shadow: 0 0 0 1px var(--border-strong);
 }
 
+.seg.seg-inline {
+  margin-bottom: 0;
+}
+
+/* Ports view */
+.chip-bad {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-color: transparent;
+}
+.ports-table .chip {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.ports-table tr.conflict td:first-child {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+.ports-table tr.dim td {
+  opacity: 0.6;
+}
+.port-conflict-banner {
+  display: block;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.pv-hidden-note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+}
+
 .scan-list {
   display: flex;
   flex-direction: column;

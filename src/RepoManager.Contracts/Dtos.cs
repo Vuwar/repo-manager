@@ -109,7 +109,21 @@ public sealed record PortDto
     public string? CommandLine { get; init; }
     public string? ManagedBy { get; init; }
     public string Address { get; init; } = "";
+    public string? ProcessPath { get; init; }
+    /// <summary>Runs as the current user.</summary>
+    public bool Mine { get; init; }
+    /// <summary>Windows itself or a service: PID 0/4, another account, or an exe under %WINDIR%.</summary>
+    public bool System { get; init; }
+    /// <summary>Process name is on the user's hidden list.</summary>
+    public bool Hidden { get; init; }
+    /// <summary>Shown in the default "dev ports" view.</summary>
+    public bool Dev { get; init; }
+    /// <summary>More than one process listens on this port (e.g. one on 0.0.0.0, another on [::1]).</summary>
+    public bool Conflict { get; init; }
+    public bool CanKill { get; init; }
 }
+
+public sealed record HidePortProcessRequest(string ProcessName, bool Hidden);
 
 public sealed record ResolveResultDto
 {

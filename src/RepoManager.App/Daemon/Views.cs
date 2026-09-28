@@ -53,30 +53,23 @@ public static class Views
         return result;
     }
 
-    public static List<PortDto> Ports(Supervisor sup, bool withCommandLines)
+    /// <summary>
+    /// Listening ports. Without <paramref name="all"/>: only dev rows (managed, or your own non-Windows processes
+    /// below the dynamic range, not hidden), plus any other owner of a port a dev row uses, so conflicts stay visible.
+    /// </summary>
+    public static List<PortDto> Ports(DaemonHost d, bool withCommandLines, bool all)
     {
-        var managed = sup.ManagedPids();
         var listening = PortInspector.Listening();
-        var cmds = withCommandLines ? PortInspector.CommandLines(listening.Select(l => l.Pid)) : [];
-        var names = new Dictionary<int, string?>();
-        return listening
-            .GroupBy(l => (l.Port, l.Pid))
-            .Select(g =>
-            {
-                var pid = g.Key.Pid;
-                if (!names.TryGetValue(pid, out var n)) names[pid] = n = PortInspector.ProcessName(pid);
-                return new PortDto
-                {
-                    Port = g.Key.Port,
-                    Pid = pid,
-                    ProcessName = n,
-                    CommandLine = cmds.GetValueOrDefault(pid),
-                    ManagedBy = managed.GetValueOrDefault(pid),
-                    Address = string.Join(", ", g.Select(x => x.Address).Distinct()),
-                };
-            })
-            .OrderBy(p => p.Port)
-            .ToList();
+        var rows = PortView.Build(listening, d.Supervisor.ManagedPids(), ProcessInfo.Get, PortInspector.ProcessName,
+            new Dictionary<int, string>(), d.Config.Registry.HiddenPortProcesses, Environment.ProcessId);
+        if (!all)
+        {
+            var devPorts = rows.Where(r => r.Dev).Select(r => r.Port).ToHashSet();
+            rows = rows.Where(r => devPorts.Contains(r.Port)).ToList();
+        }
+        if (!withCommandLines) return rows;
+        var cmds = PortInspector.CommandLines(rows.Select(r => r.Pid));
+        return rows.Select(r => r with { CommandLine = cmds.GetValueOrDefault(r.Pid) }).ToList();
     }
 
     public static EffectiveConfigDto Config(DaemonHost d, ProjectConfig inst)

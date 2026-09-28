@@ -64,6 +64,8 @@ public sealed class RegistryFile
 {
     public List<RegistryProject> Projects { get; set; } = [];
     public List<string> ScanRoots { get; set; } = [];
+    /// <summary>Process names hidden from the dev ports view (e.g. "Spotify").</summary>
+    public List<string> HiddenPortProcesses { get; set; } = [];
 }
 
 public sealed class RegistryProject

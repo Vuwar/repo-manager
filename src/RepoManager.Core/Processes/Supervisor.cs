@@ -426,12 +426,22 @@ public sealed class Supervisor : IDisposable
                 return new(null, $"port {port} is already used by {owner} (managed by RepoManager)");
         if (!options.KillOwner)
         {
-            var o = owners[0];
-            var name = PortInspector.ProcessName(o.Pid) ?? "?";
-            var cmd = PortInspector.CommandLine(o.Pid);
-            return new(null, $"port {port} is in use by PID {o.Pid} ({name}){(cmd != null ? ": " + cmd : "")}. Use --kill-owner to kill it.");
+            // Several processes can share a port on different addresses (0.0.0.0 vs [::1]); name them all.
+            var described = owners.DistinctBy(o => o.Pid).Select(o =>
+            {
+                var name = PortInspector.ProcessName(o.Pid) ?? "?";
+                var cmd = PortInspector.CommandLine(o.Pid);
+                return $"PID {o.Pid} ({name}) on {o.Address}{(cmd != null ? ": " + cmd : "")}";
+            });
+            return new(null, $"port {port} is in use by {string.Join("; ", described)}. Use --kill-owner to kill it.");
         }
-        foreach (var o in owners)
+        foreach (var o in owners.DistinctBy(o => o.Pid))
+        {
+            var info = ProcessInfo.Get(o.Pid);
+            if (!info.Mine || info.System)
+                return new(null, $"port {port} is held by PID {o.Pid} ({PortInspector.ProcessName(o.Pid)}), a Windows or system process; RepoManager will not kill it. Change the service's port.");
+        }
+        foreach (var o in owners.DistinctBy(o => o.Pid))
         {
             r.Log.Append(LogStream.Sys, $"killing PID {o.Pid} ({PortInspector.ProcessName(o.Pid)}) holding port {port}");
             PortInspector.KillTree(o.Pid);

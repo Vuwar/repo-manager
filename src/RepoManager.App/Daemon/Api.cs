@@ -187,7 +187,9 @@ public static class Api
             }
         });
 
-        api.MapGet("/ports", (bool? cmd) => Views.Ports(sup, cmd ?? false));
+        api.MapGet("/ports", (bool? cmd, bool? all) => Views.Ports(d, cmd ?? false, all ?? false));
+
+        api.MapPost("/ports/hide", (HidePortProcessRequest req) => d.Config.SetPortProcessHidden(req.ProcessName, req.Hidden));
 
         api.MapPost("/ports/kill", (KillPidRequest req) =>
         {
@@ -197,6 +199,9 @@ public static class Api
             if (req.Pid == Environment.ProcessId) return ActionResultDto.Fail("that is RepoManager itself");
             var name = PortInspector.ProcessName(req.Pid);
             if (name == null) return ActionResultDto.Fail($"no process {req.Pid}");
+            var info = ProcessInfo.Get(req.Pid);
+            if (!info.Mine || info.System)
+                return ActionResultDto.Fail($"PID {req.Pid} ({name}) is a Windows or system process; RepoManager does not kill those");
             PortInspector.KillTree(req.Pid);
             return ActionResultDto.Success($"killed {req.Pid} ({name})");
         });

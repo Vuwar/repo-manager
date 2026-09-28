@@ -117,8 +117,9 @@ export const api = {
   logs: (target: string, opts: { tail?: number; grep?: string; since?: string } = {}, signal?: AbortSignal) =>
     request<LogLineDto[]>('GET', '/api/logs' + qs({ target, tail: opts.tail ?? 500, grep: opts.grep, since: opts.since }), undefined, signal),
 
-  ports: (cmd = true) => request<PortDto[]>('GET', '/api/ports' + qs({ cmd })),
+  ports: (cmd = true, all = false) => request<PortDto[]>('GET', '/api/ports' + qs({ cmd, all })),
   killPid: (pid: number) => action('/api/ports/kill', { pid }),
+  hidePortProcess: (processName: string, hidden: boolean) => action('/api/ports/hide', { processName, hidden }),
 
   addProject: (path: string) => action('/api/projects/add', { path }),
   removeProject: (project: string) => action('/api/projects/remove', { project }),

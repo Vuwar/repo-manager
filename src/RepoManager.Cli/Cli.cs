@@ -19,7 +19,7 @@ public static class Cli
           devm logs <svc> [--tail 100] [--since 5m] [--grep text] [--follow]
           devm run <task> [--no-wait] [--timeout 600]
           devm url <svc>
-          devm ports                               listening ports and their owners
+          devm ports [--all]                       dev ports and their owners (--all: every listening port)
           devm add [<path>]                        register a project (default: current folder)
           devm scan <dir>                          list repos under dir that can be added
           devm open [vscode|rider|explorer|terminal]
@@ -259,16 +259,22 @@ public static class Cli
 
     private static async Task<int> Ports(DaemonClient c, Args a)
     {
-        var ports = await c.GetAsync<List<PortDto>>("api/ports?cmd=true");
+        var all = a.Flag("all");
+        var ports = await c.GetAsync<List<PortDto>>($"api/ports?cmd=true&all={all.ToString().ToLowerInvariant()}");
         if (a.Json) { WriteJson(ports); return 0; }
-        var rows = new List<string[]> { new[] { "PORT", "PID", "PROCESS", "MANAGED BY", "COMMAND" } };
+        if (ports.Count == 0) { Console.WriteLine(all ? "No listening ports." : "No dev ports in use. (devm ports --all lists everything)"); return 0; }
+        var rows = new List<string[]> { new[] { "PORT", "ADDRESS", "PID", "PROCESS", "MANAGED BY", "COMMAND" } };
         foreach (var p in ports)
         {
             var cmd = p.CommandLine ?? "";
-            if (cmd.Length > 80) cmd = cmd[..77] + "...";
-            rows.Add([p.Port.ToString(), p.Pid.ToString(), p.ProcessName ?? "?", p.ManagedBy ?? "", cmd]);
+            if (cmd.Length > 70) cmd = cmd[..67] + "...";
+            rows.Add([p.Port + (p.Conflict ? " !" : ""), p.Address, p.Pid.ToString(), p.ProcessName ?? "?", p.ManagedBy ?? "", cmd]);
         }
         PrintTable(rows);
+        var conflicts = ports.Where(p => p.Conflict).Select(p => p.Port).Distinct().ToList();
+        if (conflicts.Count > 0)
+            Console.WriteLine($"\n! port {string.Join(", ", conflicts)}: several processes listen on it; which one localhost reaches depends on IPv4/IPv6.");
+        if (!all) Console.WriteLine("\nDev ports only (managed services and your own processes). devm ports --all lists everything.");
         return 0;
     }
 

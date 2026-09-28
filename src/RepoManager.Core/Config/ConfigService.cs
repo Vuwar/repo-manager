@@ -213,6 +213,20 @@ public sealed class ConfigService : IDisposable
         return ActionResultDto.Success($"updated {req.Project}", req.Project);
     }
 
+    public ActionResultDto SetPortProcessHidden(string processName, bool hidden)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return ActionResultDto.Fail("process name required");
+        lock (_lock)
+        {
+            var list = _registry.HiddenPortProcesses;
+            var i = list.FindIndex(x => string.Equals(x, processName, StringComparison.OrdinalIgnoreCase));
+            if (hidden && i < 0) list.Add(processName);
+            else if (!hidden && i >= 0) list.RemoveAt(i);
+            Save();
+        }
+        return ActionResultDto.Success(hidden ? $"hiding {processName}" : $"showing {processName}");
+    }
+
     public IReadOnlyList<ScanResultDto> Scan(string dir)
     {
         if (!Directory.Exists(dir)) return [];

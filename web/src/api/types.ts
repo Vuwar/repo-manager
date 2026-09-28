@@ -98,6 +98,18 @@ export interface PortDto {
   commandLine?: string;
   managedBy?: string;
   address: string;
+  processPath?: string;
+  /** Runs as the current user. */
+  mine: boolean;
+  /** Windows or a service (PID 0/4, another account, or under %WINDIR%). */
+  system: boolean;
+  /** Process name is on the hidden list. */
+  hidden: boolean;
+  /** Shown in the default dev view. */
+  dev: boolean;
+  /** More than one process listens on this port. */
+  conflict: boolean;
+  canKill: boolean;
 }
 
 export interface ResolveResultDto {
