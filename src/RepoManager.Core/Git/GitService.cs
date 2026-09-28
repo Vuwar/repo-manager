@@ -77,7 +77,7 @@ public sealed class GitService
                 // Names must stay unique inside a project: add a suffix on collision.
                 var unique = name; var i = 2;
                 while (result.Any(w => string.Equals(w.Name, unique, StringComparison.OrdinalIgnoreCase))) unique = $"{name}-{i++}";
-                result.Add(new WorktreeInfo(System.IO.Path.GetFullPath(path), unique, branch));
+                result.Add(new WorktreeInfo(PathUtil.Normalize(path), unique, branch));
             }
             path = null; branch = null; skip = false;
         }
@@ -94,14 +94,9 @@ public sealed class GitService
         return result;
     }
 
-    public static bool SamePath(string a, string b) =>
-        string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
+    public static bool SamePath(string a, string b) => PathUtil.Same(a, b);
 
-    public static string Normalize(string p)
-    {
-        try { p = System.IO.Path.GetFullPath(p.Replace('/', '\\')); } catch { /* keep as is */ }
-        return p.TrimEnd('\\');
-    }
+    public static string Normalize(string p) => PathUtil.Normalize(p);
 
     private static (int ExitCode, string Output)? Run(string cwd, params string[] args)
     {

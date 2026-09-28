@@ -233,29 +233,18 @@ public static partial class HookPolicy
 
     private static string Combine(string baseDir, string rel)
     {
-        try { return Path.GetFullPath(Path.Combine(baseDir, FromPosix(rel.Trim('"', '\'')))); }
+        try { return PathUtil.Normalize(Path.Combine(baseDir, PathUtil.FromPosix(rel.Trim('"', '\'')))); }
         catch { return baseDir; }
     }
 
-    /// <summary>Git Bash paths: "/c/Users/x" → "C:\Users\x".</summary>
-    public static string FromPosix(string p)
-    {
-        if (p.Length >= 2 && p[0] == '/' && char.IsLetter(p[1]) && (p.Length == 2 || p[2] == '/'))
-            return char.ToUpperInvariant(p[1]) + ":\\" + (p.Length > 3 ? p[3..].Replace('/', '\\') : "");
-        return p;
-    }
-
-    private static bool SamePath(string a, string b) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(a.Replace('/', '\\')), Path.TrimEndingDirectorySeparator(b.Replace('/', '\\')), StringComparison.OrdinalIgnoreCase);
+    private static bool SamePath(string a, string b) => PathUtil.Same(a, b);
 
     /// <summary>Services of the deepest instance containing cwd.</summary>
     private static List<ManagedServiceInfo> ServicesAt(string? cwd, IReadOnlyList<ManagedServiceInfo> services)
     {
         if (string.IsNullOrWhiteSpace(cwd)) return [];
-        string full;
-        try { full = Path.GetFullPath(FromPosix(cwd).Replace('/', '\\')).TrimEnd('\\') + "\\"; } catch { return []; }
         var best = services
-            .Where(s => full.StartsWith(s.Root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+            .Where(s => PathUtil.IsUnder(cwd, s.Root))
             .GroupBy(s => s.InstanceKey)
             .OrderByDescending(g => g.First().Root.Length)
             .FirstOrDefault();

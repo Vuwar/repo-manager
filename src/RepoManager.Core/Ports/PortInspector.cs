@@ -111,6 +111,25 @@ public static class PortInspector
         return null;
     }
 
+    /// <summary>Command lines of many processes with one WMI query.</summary>
+    public static Dictionary<int, string> CommandLines(IEnumerable<int> pids)
+    {
+        var wanted = pids.ToHashSet();
+        var result = new Dictionary<int, string>();
+        if (wanted.Count == 0) return result;
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process");
+            foreach (var o in searcher.Get())
+            {
+                var pid = Convert.ToInt32(o["ProcessId"]);
+                if (wanted.Contains(pid) && o["CommandLine"] is string cmd) result[pid] = cmd;
+            }
+        }
+        catch { }
+        return result;
+    }
+
     /// <summary>Kills an external port owner and its children (used for --kill-owner).</summary>
     public static void KillTree(int pid)
     {

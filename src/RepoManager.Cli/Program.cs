@@ -1,1 +1,3 @@
-﻿Console.WriteLine("Hello, World!");
+using RepoManager.Cli;
+
+return await Cli.RunAsync(args);

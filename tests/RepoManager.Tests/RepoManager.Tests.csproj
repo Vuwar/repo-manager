@@ -17,6 +17,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\RepoManager.Core\RepoManager.Core.csproj" />
     <ProjectReference Include="..\FakeServer\FakeServer.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\RepoManager.App\RepoManager.App.csproj" />
+    <ProjectReference Include="..\..\src\RepoManager.Cli\RepoManager.Cli.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
