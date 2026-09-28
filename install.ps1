@@ -74,8 +74,18 @@ Get-Process -Name RepoManager -ErrorAction SilentlyContinue | Where-Object { $_.
 
 Step "Installing to $bin"
 New-Item -ItemType Directory -Force $bin | Out-Null
-Copy-Item (Join-Path $publish 'RepoManager.exe') $appExe -Force
-Copy-Item (Join-Path $publish 'devm.exe') $devmExe -Force
+# A running exe cannot be overwritten but can be renamed. Claude sessions keep 'devm mcp' running,
+# so move the old file aside; leftovers from earlier updates are deleted once nothing uses them.
+Get-ChildItem $bin -Filter '*.exe.old*' -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+}
+foreach ($target in $appExe, $devmExe) {
+    if (Test-Path $target) {
+        try { Remove-Item $target -Force -ErrorAction Stop }
+        catch { Rename-Item $target "$(Split-Path $target -Leaf).old.$([DateTime]::Now.Ticks)" }
+    }
+    Copy-Item (Join-Path $publish (Split-Path $target -Leaf)) $target
+}
 
 Step 'Adding bin folder to the user PATH'
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
