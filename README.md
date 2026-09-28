@@ -1,5 +1,7 @@
 # RepoManager
 
+[![License: MIT](https://img.shields.io/github/license/Vuwar/repo-manager)](LICENSE)
+
 One place that owns every dev server on your Windows machine. Start, stop, restart and read logs from a tray app,
 from the `devm` CLI, or from Claude Code through MCP. A Claude Code hook stops sessions from killing or duplicating
 servers that someone else is using.
