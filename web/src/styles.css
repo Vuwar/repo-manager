@@ -393,6 +393,7 @@ code {
 .group-head {
   display: flex;
   align-items: center;
+  gap: 6px;
   height: 26px;
   padding: 0 2px 0 4px;
   color: var(--text-3);
@@ -1536,8 +1537,6 @@ body.resizing .log-handle::after {
   gap: 10px;
   padding: 0 12px;
   white-space: pre;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 18.6px;
 }
 .log-body.wrap .log-line {
   white-space: pre-wrap;
@@ -1646,7 +1645,7 @@ mark.hl {
 
 .cfg-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
   gap: 10px;
   padding: 12px 14px 14px;
 }
@@ -1672,7 +1671,7 @@ mark.hl {
 }
 .cfg-field {
   display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) auto;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: baseline;
   padding: 3px 10px;
@@ -2253,4 +2252,16 @@ mark.hl {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.log-body:focus-visible {
+  outline-offset: -2px;
+}
+
+.ports-table td {
+  white-space: nowrap;
+}
+.managed-link {
+  white-space: nowrap;
+  text-align: left;
 }

@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { LogLineDto } from '../api/types';
-import { formatClock, parseTime, shortName } from '../lib/format';
+import { formatClock, shortName } from '../lib/format';
+import { mergeLogs } from '../lib/logs';
 import { dispatch, useAppState } from '../state/store';
-import { MAX_LOG_LINES } from '../state/reducer';
 import { AnsiText, segmentsOf } from './AnsiText';
 import { Icon } from './Icon';
 import { Button } from './ui';
@@ -49,19 +49,6 @@ function plainText(l: LogLineDto): string {
   return t;
 }
 
-/** Merges several per-source buffers by timestamp (stable within a source). */
-export function mergeLogs(buffers: LogLineDto[][], max = MAX_LOG_LINES): LogLineDto[] {
-  const nonEmpty = buffers.filter((b) => b.length);
-  if (nonEmpty.length === 0) return [];
-  if (nonEmpty.length === 1) return nonEmpty[0].length > max ? nonEmpty[0].slice(-max) : nonEmpty[0];
-  const tagged: { t: number; i: number; l: LogLineDto }[] = [];
-  let i = 0;
-  for (const b of nonEmpty) for (const l of b) tagged.push({ t: parseTime(l.timestamp), i: i++, l });
-  tagged.sort((a, b) => a.t - b.t || a.i - b.i);
-  const out = tagged.map((x) => x.l);
-  return out.length > max ? out.slice(-max) : out;
-}
-
 const LogRow = memo(function LogRow({
   line,
   needle,
@@ -89,7 +76,15 @@ const LogRow = memo(function LogRow({
 export function LogPane({ labelFor }: { labelFor?: (source: string) => string }) {
   const sources = useAppState((s) => s.logSources);
   const logs = useAppState((s) => s.logs);
-  const [height, setHeight] = useState(() => readNum(HEIGHT_KEY, 300));
+  const [height, setHeight] = useState(() => readNum(HEIGHT_KEY, Math.round(Math.min(300, window.innerHeight * 0.36))));
+  const [viewportH, setViewportH] = useState(() => window.innerHeight);
+  useEffect(() => {
+    const onResize = () => setViewportH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  // Never let the log pane squeeze the project view below ~200px.
+  const shownHeight = Math.max(90, Math.min(height, viewportH - 200));
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState('');
   const [follow, setFollow] = useState(true);
@@ -117,21 +112,35 @@ export function LogPane({ labelFor }: { labelFor?: (source: string) => string })
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (el && follow) el.scrollTop = el.scrollHeight;
-  }, [visible, follow, collapsed, height]);
+  }, [visible, follow, collapsed, shownHeight]);
 
+  // Only user-initiated scrolling (wheel, keys, scrollbar drag) pauses autoscroll; content growth never does.
+  const lastUser = useRef(0);
+  const markUser = () => {
+    lastUser.current = performance.now();
+  };
   const onScroll = () => {
     const el = bodyRef.current;
     if (!el) return;
+    if (!pointerDown.current && performance.now() - lastUser.current > 500) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
     if (!atBottom && follow) setFollow(false);
     else if (atBottom && !follow) setFollow(true);
   };
+  const pointerDown = useRef(false);
+  useEffect(() => {
+    const up = () => {
+      pointerDown.current = false;
+    };
+    window.addEventListener('pointerup', up);
+    return () => window.removeEventListener('pointerup', up);
+  }, []);
 
   // Drag handle to resize.
   const onDragStart = (e: ReactPointerEvent) => {
     e.preventDefault();
     const startY = e.clientY;
-    const startH = collapsed ? 34 : height;
+    const startH = collapsed ? 34 : shownHeight;
     setCollapsed(false);
     const move = (ev: PointerEvent) => {
       const max = Math.max(160, window.innerHeight - 160);
@@ -158,7 +167,7 @@ export function LogPane({ labelFor }: { labelFor?: (source: string) => string })
   const remove = (s: string) => dispatch({ type: 'setLogSources', sources: sources.filter((x) => x !== s) });
 
   return (
-    <section className={`logpane${collapsed ? ' collapsed' : ''}`} style={{ height: collapsed ? undefined : height }} aria-label="Logs">
+    <section className={`logpane${collapsed ? ' collapsed' : ''}`} style={{ height: collapsed ? undefined : shownHeight }} aria-label="Logs">
       <div className="log-handle" onPointerDown={onDragStart} onDoubleClick={() => setCollapsed(!collapsed)} title="Drag to resize, double-click to collapse" />
       <div className="log-head">
         <Button
@@ -233,7 +242,19 @@ export function LogPane({ labelFor }: { labelFor?: (source: string) => string })
         </div>
       </div>
       {!collapsed && (
-        <div className={`log-body${prefs.wrap ? ' wrap' : ''}`} ref={bodyRef} onScroll={onScroll} role="log">
+        <div
+          className={`log-body${prefs.wrap ? ' wrap' : ''}`}
+          ref={bodyRef}
+          onScroll={onScroll}
+          onWheel={markUser}
+          onKeyDown={markUser}
+          onPointerDown={() => {
+            pointerDown.current = true;
+            markUser();
+          }}
+          tabIndex={0}
+          role="log"
+        >
           {sources.length === 0 ? (
             <div className="log-empty">Select a service or task to see its output. Ctrl+click or tick several to merge them.</div>
           ) : visible.length === 0 ? (

@@ -95,7 +95,7 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
     >
       {inst.worktree ? <Icon name="branch" size={12} /> : <span className="nav-bullet" />}
       <span className="nav-label">{instanceLabel(inst)}</span>
-      {!inst.worktree && inst.git?.branch && <span className="nav-branch">{inst.git.branch}</span>}
+      {inst.git?.branch && inst.git.branch !== instanceLabel(inst) && <span className="nav-branch">{inst.git.branch}</span>}
       <Dots inst={inst} />
     </button>
   );
@@ -246,7 +246,7 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
                           </button>
                           <button type="button" className="proj-main" onClick={() => main && go(main.key)} title={p.root}>
                             <span className="nav-label proj-name">{p.name}</span>
-                            {main?.git?.branch && <span className="nav-branch">{main.git.branch}</span>}
+                            {main?.git?.branch && (pCollapsed || !worktrees.length) && <span className="nav-branch">{main.git.branch}</span>}
                             {(bad || !p.valid) && <Icon name="alert" size={12} className="icon bad-text" />}
                             {main && (pCollapsed || !worktrees.length) && <Dots inst={main} />}
                           </button>

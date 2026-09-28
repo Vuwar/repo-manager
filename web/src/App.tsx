@@ -105,6 +105,13 @@ function Shell({ token }: { token: string }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.modal') && setDrawer(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawer]);
+
   const current = view.kind === 'instance' ? findInstance(projects, view.key) : null;
 
   const labelFor = useMemo(() => {
