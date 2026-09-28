@@ -76,6 +76,7 @@ public class SupervisorTests
             var res = await h.Supervisor.StartAsync(h.Id("api"));
             Assert.False(res.Ok);
             Assert.Contains($"PID {Environment.ProcessId}", res.Error);
+            Assert.Equal([StartFixes.KillOwner], res.Fixes);
             Assert.Equal(ServiceState.Failed, h.Supervisor.Find(h.Id("api"))!.State);
         }
         finally { listener.Stop(); }
@@ -90,6 +91,57 @@ public class SupervisorTests
         Assert.True(await TestEnv.Eventually(() => PortInspector.IsListening(port)));
         var killed = await h.Supervisor.StartAsync(h.Id("api"), new StartOptions(KillOwner: true));
         Assert.True(killed.Ok, killed.Error);
+    }
+
+    [Fact]
+    public async Task Process_listening_on_another_port_is_reported_as_ignoring_its_port()
+    {
+        var port = TestEnv.FreePort();
+        var other = TestEnv.FreePort();
+        using var h = new Harness(Services(new { web = Harness.Fake($"--port {other}", new { port, readyTimeoutSeconds = 2 }) }));
+
+        var res = await h.Supervisor.StartAsync(h.Id("web"));
+        Assert.False(res.Ok);
+        Assert.Contains($"listens on {other}", res.Error);
+        Assert.Contains("${port:web}", res.Error);
+        Assert.Equal([StartFixes.EditConfig], res.Fixes);
+    }
+
+    [Fact]
+    public async Task Busy_port_of_a_movable_service_offers_and_supports_a_new_port()
+    {
+        var port = TestEnv.FreePort();
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        using var h = new Harness(Services(new
+        {
+            api = Harness.Fake("--port-env API_PORT", new { port, env = new Dictionary<string, string> { ["API_PORT"] = "${port:api}" } }),
+        }));
+        try
+        {
+            var res = await h.Supervisor.StartAsync(h.Id("api"));
+            Assert.False(res.Ok);
+            Assert.Equal([StartFixes.KillOwner, StartFixes.NewPort], res.Fixes);
+
+            var moved = await h.Supervisor.StartAsync(h.Id("api"), new StartOptions(NewPort: true));
+            Assert.True(moved.Ok, moved.Error);
+            var r = h.Supervisor.Find(h.Id("api"))!;
+            Assert.NotEqual(port, r.Port);
+            Assert.True(PortInspector.IsListening(r.Port!.Value));
+            // A main checkout's fixed port moves for this run only.
+            Assert.Null(h.State.GetPort(r.InstanceKey, r.Name));
+        }
+        finally { listener.Stop(); }
+    }
+
+    [Fact]
+    public async Task New_port_is_refused_when_the_command_cannot_receive_it()
+    {
+        var port = TestEnv.FreePort();
+        using var h = new Harness(Services(new { api = Harness.Fake($"--port {port}", new { port }) }));
+        var res = await h.Supervisor.StartAsync(h.Id("api"), new StartOptions(NewPort: true));
+        Assert.False(res.Ok);
+        Assert.Equal([StartFixes.EditConfig], res.Fixes);
     }
 
     [Fact]

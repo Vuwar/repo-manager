@@ -91,11 +91,12 @@ public sealed class DevServerTools(DaemonClient client)
         [Description("Service name, full id, or 'all' for every service of the checkout")] string service,
         [Description(CwdHelp)] string? cwd = null,
         [Description("Kill a non-managed process that holds the service's port")] bool killOwner = false,
-        [Description("Start in a worktree even though the service is not worktree-ready")] bool force = false)
+        [Description("Start in a worktree even though the service is not worktree-ready")] bool force = false,
+        [Description("Start on a new free port (only for services that take their port from ${port:...})")] bool newPort = false)
     {
         await Connect();
         return Format(await client.PostAsync<ActionResultDto>("api/services/start",
-            new ServiceActionRequest { Target = service, Cwd = Cwd(cwd), KillOwner = killOwner, Force = force }));
+            new ServiceActionRequest { Target = service, Cwd = Cwd(cwd), KillOwner = killOwner, Force = force, NewPort = newPort }));
     }
 
     [McpServerTool(Name = "stop_service", Destructive = true)]
@@ -111,11 +112,12 @@ public sealed class DevServerTools(DaemonClient client)
     public async Task<string> RestartService(
         [Description("Service name, full id, or 'all'")] string service,
         [Description(CwdHelp)] string? cwd = null,
-        [Description("Kill a non-managed process that holds the service's port")] bool killOwner = false)
+        [Description("Kill a non-managed process that holds the service's port")] bool killOwner = false,
+        [Description("Start on a new free port (only for services that take their port from ${port:...})")] bool newPort = false)
     {
         await Connect();
         return Format(await client.PostAsync<ActionResultDto>("api/services/restart",
-            new ServiceActionRequest { Target = service, Cwd = Cwd(cwd), KillOwner = killOwner }));
+            new ServiceActionRequest { Target = service, Cwd = Cwd(cwd), KillOwner = killOwner, NewPort = newPort }));
     }
 
     [McpServerTool(Name = "get_logs", ReadOnly = true)]

@@ -93,12 +93,27 @@ public sealed record ActionResultDto
     public string? Error { get; init; }
     public IReadOnlyList<string> Affected { get; init; } = [];
     public IReadOnlyList<string> LogTail { get; init; } = [];
+    /// <summary>Follow-ups that can fix a failed start (<see cref="StartFixes"/>), for the UI to offer as buttons.</summary>
+    public IReadOnlyList<string> Fixes { get; init; } = [];
 
     public static ActionResultDto Success(string message, params string[] affected) =>
         new() { Ok = true, Message = message, Affected = affected };
 
-    public static ActionResultDto Fail(string error, IReadOnlyList<string>? logTail = null) =>
-        new() { Ok = false, Error = error, LogTail = logTail ?? [] };
+    public static ActionResultDto Fail(string error, IReadOnlyList<string>? logTail = null, IReadOnlyList<string>? fixes = null) =>
+        new() { Ok = false, Error = error, LogTail = logTail ?? [], Fixes = fixes ?? [] };
+}
+
+/// <summary>Values of <see cref="ActionResultDto.Fixes"/>.</summary>
+public static class StartFixes
+{
+    /// <summary>Retry with KillOwner: a process outside RepoManager holds the port.</summary>
+    public const string KillOwner = "kill-owner";
+    /// <summary>Retry with NewPort: the service takes its port from ${port:...}, so it can move.</summary>
+    public const string NewPort = "new-port";
+    /// <summary>Retry with Force: the service is not worktree-ready.</summary>
+    public const string Force = "force";
+    /// <summary>The service config must change (e.g. the command ignores its assigned port).</summary>
+    public const string EditConfig = "edit-config";
 }
 
 public sealed record PortDto
@@ -169,6 +184,8 @@ public sealed record ServiceActionRequest
     public string? Cwd { get; init; }
     public bool KillOwner { get; init; }
     public bool Force { get; init; }
+    /// <summary>Start on a newly allocated free port instead of the configured or remembered one.</summary>
+    public bool NewPort { get; init; }
 }
 
 public sealed record InstanceActionRequest(string Instance);

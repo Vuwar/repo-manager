@@ -52,7 +52,7 @@ public static class Api
         {
             var r = sup.Resolve(req.Target, req.Cwd);
             if (r.Error != null) return ActionResultDto.Fail(r.Error);
-            var opts = new StartOptions(req.KillOwner, req.Force);
+            var opts = new StartOptions(req.KillOwner, req.Force, req.NewPort);
             return r.ServiceIds.Count == 1 ? await sup.StartAsync(r.ServiceIds[0], opts) : await sup.StartManyAsync(r.ServiceIds, opts);
         });
 
@@ -67,7 +67,7 @@ public static class Api
         {
             var r = sup.Resolve(req.Target, req.Cwd);
             if (r.Error != null) return ActionResultDto.Fail(r.Error);
-            var opts = new StartOptions(req.KillOwner, req.Force);
+            var opts = new StartOptions(req.KillOwner, req.Force, req.NewPort);
             return r.ServiceIds.Count == 1 ? await sup.RestartAsync(r.ServiceIds[0], opts) : await sup.RestartManyAsync(r.ServiceIds, opts);
         });
 

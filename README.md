@@ -69,7 +69,7 @@ layer every value comes from.
 | Field | Meaning |
 |---|---|
 | `command`, `args`, `cwd`, `env` | What to run (through `cmd.exe`, so `npm`, `.bat` and `.cmd` work), from where (relative to the repo). |
-| `port` | Fixed port. Start fails with the owner's details if it is taken (`--kill-owner` kills that owner). |
+| `port` | Fixed port. Start fails with the owner's details if it is taken (`--kill-owner` kills that owner; `--new-port` starts this run on a free port when args/env use `${port:<name>}`). |
 | `autoPort` | Use `port` when free, otherwise a free port in 20000–29999. |
 | `url`, `health` | Link shown in the UI; health URL for readiness (2xx) and health checks every 10 s. |
 | `dependsOn` | Started first, and must be ready before this one starts. |
@@ -94,7 +94,7 @@ Run inside a repo or worktree; short names resolve from the current folder. Full
 
 ```
 devm status [--all]
-devm start|stop|restart <svc|all> [--kill-owner] [--force]
+devm start|stop|restart <svc|all> [--kill-owner] [--force] [--new-port]
 devm wait <svc>
 devm logs <svc> [--tail 100] [--since 5m] [--grep text] [--follow]
 devm run <task>

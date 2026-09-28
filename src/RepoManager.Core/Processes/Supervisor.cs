@@ -6,7 +6,7 @@ using RepoManager.Core.State;
 
 namespace RepoManager.Core.Processes;
 
-public sealed record StartOptions(bool KillOwner = false, bool Force = false);
+public sealed record StartOptions(bool KillOwner = false, bool Force = false, bool NewPort = false);
 
 public sealed record Notification(string Project, string Title, string Message, bool IsError);
 
@@ -253,6 +253,7 @@ public sealed class Supervisor : IDisposable
             Message = string.Join("\n", results.Where(r => r.Result.Ok).Select(r => r.Result.Message)),
             Affected = results.Where(r => r.Result.Ok).Select(r => r.Id).ToList(),
             LogTail = failed[0].Result.LogTail,
+            Fixes = failed.Count == 1 ? failed[0].Result.Fixes : [],
         };
     }
 
@@ -264,7 +265,7 @@ public sealed class Supervisor : IDisposable
         if (r.Config.Disabled) return ActionResultDto.Fail($"{r.Id} is disabled");
         if (r.IsWorktree && !r.WorktreeReady && !options.Force)
             return ActionResultDto.Fail($"{r.Id} is not worktree-ready: it uses a fixed port and no ${{port:{r.Name}}} in its args/env, so a second copy would clash. " +
-                                        "Make the service read its port from an env variable or argument, or pass --force.");
+                                        "Make the service read its port from an env variable or argument, or pass --force.", fixes: [StartFixes.Force, StartFixes.EditConfig]);
 
         var deps = r.Config.DependsOn.Select(d => Find(Ids.Service(inst.InstanceKey, d))).Where(d => d != null).Cast<ServiceRunner>().ToList();
         if (deps.Any(d => !d.IsUp))
@@ -272,11 +273,13 @@ public sealed class Supervisor : IDisposable
             if (!r.IsActive) SetState(r, ServiceState.WaitingDeps);
             foreach (var d in deps.Where(d => !d.IsUp))
             {
-                var res = await StartWithDepsAsync(d, options with { Force = options.Force }, chain, ct);
+                // A new port is asked for the target only; a retry of the target cannot move its dependencies.
+                var res = await StartWithDepsAsync(d, options with { NewPort = false }, chain, ct);
                 if (!res.Ok)
                 {
                     if (r.State == ServiceState.WaitingDeps) { r.LastError = $"dependency {d.Id} failed"; SetState(r, ServiceState.Failed); }
-                    return ActionResultDto.Fail($"dependency {d.Id} failed: {res.Error}", res.LogTail);
+                    return ActionResultDto.Fail($"dependency {d.Id} failed: {res.Error}", res.LogTail,
+                        res.Fixes.Where(f => f is StartFixes.KillOwner or StartFixes.Force).ToList());
                 }
             }
         }
@@ -298,7 +301,7 @@ public sealed class Supervisor : IDisposable
 
             // Ports and variables.
             var portResult = DecidePort(r, options);
-            if (portResult.Error != null) return Fail(r, portResult.Error);
+            if (portResult.Error != null) return Fail(r, portResult.Error, portResult.Fixes);
             r.Port = portResult.Port;
             var ctx = VariableContext(r.Instance, r);
             var cfg = r.Config;
@@ -354,8 +357,12 @@ public sealed class Supervisor : IDisposable
             var ready = await WaitReadyAsync(r, proc, ctx, token);
             if (ready != null)
             {
+                // Look before killing: a process that listens on another port ignored the one it was given.
+                var elsewhere = r.Port is int assigned && !proc.Exited.IsCompleted ? OtherListeningPorts(proc, assigned) : [];
                 if (r.Process == proc) { await proc.KillAsync(); r.Process = null; proc.Dispose(); }
-                return Fail(r, ready);
+                return elsewhere.Count > 0
+                    ? Fail(r, IgnoredPortError(r, ready, elsewhere), [StartFixes.EditConfig])
+                    : Fail(r, ready);
             }
 
             r.UnhealthySince = null;
@@ -376,15 +383,30 @@ public sealed class Supervisor : IDisposable
         }
     }
 
-    private ActionResultDto Fail(ServiceRunner r, string error)
+    private ActionResultDto Fail(ServiceRunner r, string error, IReadOnlyList<string>? fixes = null)
     {
         r.LastError = error;
         r.Log.Append(LogStream.Sys, "--- failed: " + error + " ---");
         SetState(r, ServiceState.Failed);
-        return ActionResultDto.Fail($"{r.Id}: {error}", r.Log.TailText(50));
+        return ActionResultDto.Fail($"{r.Id}: {error}", r.Log.TailText(50), fixes);
     }
 
-    private sealed record PortDecision(int? Port, string? Error);
+    /// <summary>Ports other than <paramref name="assigned"/> that the process tree listens on.</summary>
+    private static List<int> OtherListeningPorts(ManagedProcess proc, int assigned)
+    {
+        var pids = new HashSet<int>(proc.TreePids()) { proc.Pid };
+        return PortInspector.Listening().Where(l => pids.Contains(l.Pid) && l.Port != assigned).Select(l => l.Port).Distinct().Order().ToList();
+    }
+
+    internal static string IgnoredPortError(ServiceRunner r, string notReady, IReadOnlyList<int> elsewhere)
+    {
+        var hint = r.Config.UsesPortVariable
+            ? $"check that ${{port:{r.Name}}} reaches the option the tool reads its port from"
+            : $"pass it to the command with ${{port:{r.Name}}}, e.g. --port ${{port:{r.Name}}}";
+        return $"{notReady}, but the process listens on {string.Join(", ", elsewhere)}: the command ignores its assigned port {r.Port}; {hint}";
+    }
+
+    private sealed record PortDecision(int? Port, string? Error, IReadOnlyList<string>? Fixes = null);
 
     private PortDecision DecidePort(ServiceRunner r, StartOptions options)
     {
@@ -392,6 +414,7 @@ public sealed class Supervisor : IDisposable
         if (cfg.Port == null && !cfg.AutoPort) return new(null, null);
 
         var taken = TakenPorts(r);
+        if (options.NewPort) return NewPort(r, taken);
         if (r.IsWorktree || cfg.AutoPort)
         {
             // Main checkout: configured port when free. Worktree: never the main checkout's fixed port.
@@ -410,6 +433,24 @@ public sealed class Supervisor : IDisposable
         return CheckFixed(r, cfg.Port!.Value, options);
     }
 
+    /// <summary>
+    /// A free port other than the current one. Remembered for worktrees and autoPort services; a main checkout's
+    /// fixed port only moves for this run.
+    /// </summary>
+    private PortDecision NewPort(ServiceRunner r, HashSet<int> taken)
+    {
+        if (!r.Config.UsesPortVariable)
+            return new(null, $"cannot move {r.Id} to another port: its args/env do not use ${{port:{r.Name}}}", [StartFixes.EditConfig]);
+        taken.UnionWith(_state.AllStickyPorts());
+        if (r.Config.Port is int configured) taken.Add(configured);
+        if (r.Port is int current) taken.Add(current);
+        var p = _allocator.Allocate(taken);
+        if (p == null) return new(null, $"no free port in {PortAllocator.RangeStart}-{PortAllocator.RangeEnd}");
+        if (r.IsWorktree || r.Config.AutoPort) _state.SetPort(r.InstanceKey, r.Name, p.Value);
+        r.Log.Append(LogStream.Sys, $"moving {r.Id} to new port {p}");
+        return new(p, null);
+    }
+
     private PortDecision CheckFixed(ServiceRunner r, int port, StartOptions options)
     {
         var owners = PortInspector.OwnersOf(port);
@@ -421,9 +462,11 @@ public sealed class Supervisor : IDisposable
         }
         if (owners.Count == 0) return new(port, null);
         var managed = ManagedPids();
+        var movable = r.Config.UsesPortVariable;
         foreach (var o in owners)
             if (managed.TryGetValue(o.Pid, out var owner))
-                return new(null, $"port {port} is already used by {owner} (managed by RepoManager)");
+                return new(null, $"port {port} is already used by {owner} (managed by RepoManager)" + (movable ? "; use --new-port to start on another port" : ""),
+                    movable ? [StartFixes.NewPort] : null);
         if (!options.KillOwner)
         {
             // Several processes can share a port on different addresses (0.0.0.0 vs [::1]); name them all.
@@ -433,13 +476,16 @@ public sealed class Supervisor : IDisposable
                 var cmd = PortInspector.CommandLine(o.Pid);
                 return $"PID {o.Pid} ({name}) on {o.Address}{(cmd != null ? ": " + cmd : "")}";
             });
-            return new(null, $"port {port} is in use by {string.Join("; ", described)}. Use --kill-owner to kill it.");
+            return new(null, $"port {port} is in use by {string.Join("; ", described)}. Use --kill-owner to kill it{(movable ? " or --new-port to start on another port" : "")}.",
+                movable ? [StartFixes.KillOwner, StartFixes.NewPort] : [StartFixes.KillOwner]);
         }
         foreach (var o in owners.DistinctBy(o => o.Pid))
         {
             var info = ProcessInfo.Get(o.Pid);
             if (!info.Mine || info.System)
-                return new(null, $"port {port} is held by PID {o.Pid} ({PortInspector.ProcessName(o.Pid)}), a Windows or system process; RepoManager will not kill it. Change the service's port.");
+                return new(null, $"port {port} is held by PID {o.Pid} ({PortInspector.ProcessName(o.Pid)}), a Windows or system process; RepoManager will not kill it. " +
+                                 (movable ? "Use --new-port to start on another port, or change the service's port." : "Change the service's port."),
+                    movable ? [StartFixes.NewPort] : [StartFixes.EditConfig]);
         }
         foreach (var o in owners.DistinctBy(o => o.Pid))
         {
@@ -448,7 +494,9 @@ public sealed class Supervisor : IDisposable
         }
         var until = DateTime.UtcNow.AddSeconds(5);
         while (PortInspector.IsListening(port) && DateTime.UtcNow < until) Thread.Sleep(100);
-        return PortInspector.IsListening(port) ? new(null, $"port {port} is still in use after killing its owner") : new(port, null);
+        return PortInspector.IsListening(port)
+            ? new(null, $"port {port} is still in use after killing its owner", movable ? [StartFixes.NewPort] : null)
+            : new(port, null);
     }
 
     /// <summary>Ports in use by other active managed services (they may not be listening yet).</summary>

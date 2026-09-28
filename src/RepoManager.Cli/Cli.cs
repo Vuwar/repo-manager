@@ -12,9 +12,9 @@ public static class Cli
 
         Usage (run inside a repo or worktree; short service names resolve from the current folder):
           devm status [--all]                      services of this checkout (--all: every project)
-          devm start <svc|all> [--kill-owner] [--force]
+          devm start <svc|all> [--kill-owner] [--force] [--new-port]
           devm stop <svc|all>
-          devm restart <svc|all> [--kill-owner] [--force]
+          devm restart <svc|all> [--kill-owner] [--force] [--new-port]
           devm wait <svc> [--timeout 120]          block until running or failed
           devm logs <svc> [--tail 100] [--since 5m] [--grep text] [--follow]
           devm run <task> [--no-wait] [--timeout 600]
@@ -165,6 +165,7 @@ public static class Cli
             Cwd = Cwd,
             KillOwner = a.Flag("kill-owner"),
             Force = a.Flag("force"),
+            NewPort = a.Flag("new-port"),
         });
         return Print(a, res, failCode: verb == "stop" ? 1 : 2);
     }
