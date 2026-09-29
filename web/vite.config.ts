@@ -24,5 +24,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // The first render of a file can take several seconds on a cold CI runner; 5 s (the default) was too tight.
+    testTimeout: 20_000,
   },
 });
