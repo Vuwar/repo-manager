@@ -130,6 +130,13 @@ cd web; npm install; npm run dev   # UI dev server, proxies /api to 127.0.0.1:40
 `RepoManager.exe --headless` runs the daemon without tray or window. `REPOMANAGER_HOME` and `REPOMANAGER_PORT`
 move the data folder and API port (useful for a second, test instance).
 
+To release, push a version tag. The Release workflow tests, publishes `RepoManager.exe` and `devm.exe`
+(self-contained, win-x64) and attaches them, a zip and `SHA256SUMS.txt` to a GitHub release:
+
+```powershell
+git tag v1.0.0; git push origin v1.0.0
+```
+
 | Path | What |
 |---|---|
 | `src/RepoManager.Core` | Config layers, supervisor, Job Objects, ports, logs, git, state, hook policy |

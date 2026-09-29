@@ -1,0 +1,77 @@
+name: Release
+
+# Push a tag like v1.2.0 to publish a GitHub release with RepoManager.exe and devm.exe.
+# Run it by hand (workflow_dispatch) to build the exes as a workflow artifact without releasing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        id: version
+        run: |
+          # v1.2.0 -> 1.2.0; a manual run keeps the version in the project files.
+          $v = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^v', '' } else { '' }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build web
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Test
+        run: dotnet test -c Release
+
+      - name: Publish exes
+        run: |
+          $extra = @()
+          if ('${{ steps.version.outputs.version }}') { $extra += '-p:Version=${{ steps.version.outputs.version }}' }
+          foreach ($proj in 'src/RepoManager.App/RepoManager.App.csproj', 'src/RepoManager.Cli/RepoManager.Cli.csproj') {
+            dotnet publish $proj -c Release -p:PublishSingle=true -o artifacts/publish --nologo @extra
+            if ($LASTEXITCODE) { throw "dotnet publish $proj failed" }
+          }
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item artifacts/publish/RepoManager.exe, artifacts/publish/devm.exe dist/
+          Compress-Archive -Path dist/RepoManager.exe, dist/devm.exe -DestinationPath dist/RepoManager-win-x64.zip
+          Get-ChildItem dist -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RepoManager-win-x64
+          path: dist/*
+
+      - name: Create release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME dist/* --title $env:GITHUB_REF_NAME --generate-notes --verify-tag
