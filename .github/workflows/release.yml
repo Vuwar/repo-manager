@@ -36,12 +36,18 @@ jobs:
           $v = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^v', '' } else { '' }
           "version=$v" >> $env:GITHUB_OUTPUT
 
+      # One command per step: in a multi-line pwsh script a failing command does not fail the step.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Test web
+        working-directory: web
+        run: npm test
+
       - name: Build web
         working-directory: web
-        run: |
-          npm ci
-          npm test
-          npm run build
+        run: npm run build
 
       - name: Test
         run: dotnet test -c Release
