@@ -60,9 +60,11 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item artifacts/publish/RepoManager.exe, artifacts/publish/devm.exe dist/
           Compress-Archive -Path dist/RepoManager.exe, dist/devm.exe -DestinationPath dist/RepoManager-win-x64.zip
-          Get-ChildItem dist -File | ForEach-Object {
-            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
-          } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          # LF line endings so 'sha256sum -c SHA256SUMS.txt' works.
+          $sums = Get-ChildItem dist -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)`n"
+          }
+          [IO.File]::WriteAllText("$PWD/dist/SHA256SUMS.txt", -join $sums)
 
       - uses: actions/upload-artifact@v7
         with:
