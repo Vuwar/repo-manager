@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { sampleProjects } from '../test/fixtures';
 import { ServicesTable } from './ServicesTable';
 
@@ -24,13 +24,19 @@ function setup(opts: { worktree?: boolean; selected?: string[]; pending?: Record
 
 describe('ServicesTable', () => {
   it('shows state badges, port links, uptime and markers', () => {
+    // Freeze the clock: the fixture starts "api" 65 s before now, and a slow runner must not change the uptime.
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2026-01-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     setup();
     const api = screen.getByTestId('svc-api');
     expect(within(api).getByText('Running')).toBeTruthy();
     const link = within(api).getByRole('link');
     expect(link.getAttribute('href')).toBe('http://127.0.0.1:5080');
     expect(link.getAttribute('target')).toBe('_blank');
-    expect(within(api).getByText(/^1m 0[45]s$/)).toBeTruthy();
+    expect(within(api).getByText('1m 05s')).toBeTruthy();
     expect(within(api).getByText('auto')).toBeTruthy();
     expect(within(api).getByLabelText('Health check passing')).toBeTruthy();
     expect(within(api).getByText('2')).toBeTruthy();
