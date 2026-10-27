@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using RepoManager.App.Daemon;
@@ -11,6 +14,24 @@ public sealed class MainForm : Form
     private readonly DaemonHost _host;
     private readonly WebView2? _web;
     private bool _reallyClose;
+    private bool _mini;
+    private bool _wantTopmost;
+    private Rectangle? _fullBounds;
+    private Rectangle? _miniBounds;
+    private static readonly Size FullMinimum = new(800, 500);
+    private static readonly Color FullBack = Color.FromArgb(0x16, 0x18, 0x1d);
+
+    // Compact view background, chosen in the UI: "glass" (acrylic), "match" (colors sampled
+    // around the window) or "mixed" (both). Applies only while the window is compact.
+    private string _ambient = "";
+    private bool _glassOn;
+    private Color? _sampled;
+    private readonly System.Windows.Forms.Timer _sampleTimer = new() { Interval = 800 };
+    private (bool Dark, Color Caption, Color Text, Color Border) _titleBar =
+        (true, Color.FromArgb(0x11, 0x13, 0x17), Color.FromArgb(0xa3, 0xaa, 0xb7), Color.FromArgb(0x1f, 0x23, 0x2a));
+
+    // Acrylic as a system backdrop needs Windows 11 22H2.
+    private static bool AcrylicSupported => Environment.OSVersion.Version.Build >= 22621;
 
     public bool CanShow { get; }
 
@@ -21,8 +42,9 @@ public sealed class MainForm : Form
         Icon = Icons.App();
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1360, 860);
-        MinimumSize = new Size(800, 500);
-        BackColor = Color.FromArgb(0x16, 0x18, 0x1d);
+        MinimumSize = FullMinimum;
+        BackColor = FullBack;
+        _sampleTimer.Tick += (_, _) => Sample();
 
         try
         {
@@ -56,6 +78,8 @@ public sealed class MainForm : Form
                 e.Handled = true;
                 TrayApp.OpenInBrowser(e.Uri);
             };
+            // The UI reports its layout: the compact view gets a small window that can stay on top.
+            core.WebMessageReceived += (_, e) => OnUiMessage(e.WebMessageAsJson);
             core.DocumentTitleChanged += (_, _) => Text = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "RepoManager" : core.DocumentTitle;
             core.Navigate(_host.UiUrl);
         }
@@ -67,6 +91,222 @@ public sealed class MainForm : Form
         }
     }
 
+    private void OnUiMessage(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            switch (root.GetProperty("type").GetString())
+            {
+                case "mode":
+                    SetMini(root.GetProperty("mode").GetString() == "mini");
+                    break;
+                case "topmost":
+                    // Can arrive before the mode message; it applies once the window is compact.
+                    _wantTopmost = root.GetProperty("on").GetBoolean();
+                    TopMost = _mini && _wantTopmost;
+                    break;
+                case "titlebar":
+                    _titleBar = (
+                        root.GetProperty("dark").GetBoolean(),
+                        ColorTranslator.FromHtml(root.GetProperty("caption").GetString()!),
+                        ColorTranslator.FromHtml(root.GetProperty("text").GetString()!),
+                        ColorTranslator.FromHtml(root.GetProperty("border").GetString()!));
+                    RefreshTitleBar();
+                    break;
+                case "ambient":
+                    _ambient = root.GetProperty("mode").GetString() ?? "";
+                    _sampled = null;
+                    ApplyAmbient();
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentException or FormatException)
+        {
+            // Unknown message shape: ignore.
+        }
+    }
+
+    private void SetMini(bool mini)
+    {
+        if (mini == _mini) return;
+        _mini = mini;
+        if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+        if (mini)
+        {
+            _fullBounds = Bounds;
+            MinimumSize = LogicalToDeviceUnits(new Size(260, 180));
+            if (_miniBounds is { } saved && Screen.FromRectangle(saved).WorkingArea.IntersectsWith(saved))
+            {
+                Bounds = saved;
+            }
+            else
+            {
+                // First time: a narrow column at the right edge of the current screen.
+                var area = Screen.FromControl(this).WorkingArea;
+                var size = LogicalToDeviceUnits(new Size(320, 480));
+                var margin = LogicalToDeviceUnits(16);
+                Bounds = new Rectangle(area.Right - size.Width - margin, area.Bottom - size.Height - margin, size.Width, size.Height);
+            }
+            TopMost = _wantTopmost;
+        }
+        else
+        {
+            _miniBounds = Bounds;
+            TopMost = false;
+            MinimumSize = FullMinimum;
+            if (_fullBounds is { } full) Bounds = full;
+        }
+        ApplyAmbient();
+    }
+
+    /// <summary>Turns acrylic and screen sampling on or off for the current mode and tells the UI what is on.</summary>
+    private void ApplyAmbient()
+    {
+        var sample = _mini && _ambient is "match" or "mixed";
+        SetGlass(_mini && AcrylicSupported && _ambient is "glass" or "mixed");
+        _sampleTimer.Enabled = sample;
+        if (sample) Sample();
+        else _sampled = null;
+        PostAmbient();
+        RefreshTitleBar();
+    }
+
+    private void SetGlass(bool on)
+    {
+        if (on == _glassOn || !IsHandleCreated || _web is null) return;
+        _glassOn = on;
+        // The frame extended over the whole client area lets the backdrop show wherever the page is transparent.
+        var margins = new Margins(on ? -1 : 0);
+        DwmExtendFrameIntoClientArea(Handle, ref margins);
+        SetDwm(DwmSystemBackdropType, on ? BackdropAcrylic : BackdropAuto);
+        BackColor = on ? Color.Black : FullBack;
+        _web.DefaultBackgroundColor = on ? Color.Transparent : FullBack;
+    }
+
+    private void Sample()
+    {
+        if (!Visible || WindowState == FormWindowState.Minimized) return;
+        Color? color;
+        try
+        {
+            color = ScreenSampler.Around(VisibleBounds(), LogicalToDeviceUnits(18), LogicalToDeviceUnits(6));
+        }
+        catch (Exception ex) when (ex is Win32Exception or ExternalException or ArgumentException)
+        {
+            return; // Locked workstation or secure desktop: keep the last color.
+        }
+        if (color is not { } c) return;
+        if (_sampled is { } old && Math.Abs(old.R - c.R) + Math.Abs(old.G - c.G) + Math.Abs(old.B - c.B) < 6) return;
+        _sampled = c;
+        PostAmbient();
+        RefreshTitleBar();
+    }
+
+    private void PostAmbient()
+    {
+        if (_web?.CoreWebView2 is not { } core) return;
+        int[]? rgb = _sampled is { } c ? [c.R, c.G, c.B] : null;
+        core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "ambient", glass = _glassOn, rgb }));
+    }
+
+    /// <summary>Caption follows the background: clear over acrylic, the sampled color in match mode, else the UI theme.</summary>
+    private void RefreshTitleBar()
+    {
+        if (!IsHandleCreated) return;
+        if (_glassOn)
+        {
+            SetDwm(DwmUseImmersiveDarkMode, _titleBar.Dark ? 1 : 0);
+            SetDwm(DwmCaptionColor, DwmColorDefault);
+            SetDwm(DwmTextColor, DwmColorDefault);
+            SetDwm(DwmBorderColor, DwmColorDefault);
+        }
+        else if (_mini && _sampled is { } c)
+        {
+            // Same rule as the UI's palette (web/src/lib/ambient.ts): dark surfaces get light text.
+            var dark = Luminance(c) < 0.18;
+            var caption = Darken(c, dark ? 0.16 : 0.05);
+            PaintTitleBar(dark, caption, dark ? Color.FromArgb(0xe4, 0xe7, 0xed) : Color.FromArgb(0x1b, 0x1f, 0x27), caption);
+        }
+        else
+        {
+            PaintTitleBar(_titleBar.Dark, _titleBar.Caption, _titleBar.Text, _titleBar.Border);
+        }
+    }
+
+    private static Color Darken(Color c, double t) => Color.FromArgb((int)(c.R * (1 - t)), (int)(c.G * (1 - t)), (int)(c.B * (1 - t)));
+
+    private static double Luminance(Color c)
+    {
+        static double Lin(byte v)
+        {
+            var s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+    }
+
+    /// <summary>The window as drawn, without the invisible resize borders that <see cref="Control.Bounds"/> includes.</summary>
+    private Rectangle VisibleBounds()
+    {
+        return DwmGetWindowAttribute(Handle, DwmExtendedFrameBounds, out var r, Marshal.SizeOf<NativeRect>()) == 0
+            ? Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom)
+            : Bounds;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // Dark defaults until the UI loads and sends its theme, so the bar never flashes white.
+        RefreshTitleBar();
+    }
+
+    // DWM window attributes. Caption, text and border colors need Windows 11; older versions ignore them.
+    private const int DwmUseImmersiveDarkMode = 20;
+    private const int DwmBorderColor = 34;
+    private const int DwmCaptionColor = 35;
+    private const int DwmTextColor = 36;
+    private const int DwmSystemBackdropType = 38;
+    private const int DwmExtendedFrameBounds = 9;
+    private const int DwmColorDefault = unchecked((int)0xFFFFFFFF);
+    private const int BackdropAuto = 0;
+    private const int BackdropAcrylic = 3;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Margins(int all)
+    {
+        public int Left = all, Right = all, Top = all, Bottom = all;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out NativeRect value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
+
+    private void PaintTitleBar(bool dark, Color caption, Color text, Color border)
+    {
+        if (!IsHandleCreated) return;
+        SetDwm(DwmUseImmersiveDarkMode, dark ? 1 : 0);
+        SetDwm(DwmCaptionColor, ColorRef(caption));
+        SetDwm(DwmTextColor, ColorRef(text));
+        SetDwm(DwmBorderColor, ColorRef(border));
+    }
+
+    private void SetDwm(int attribute, int value) => DwmSetWindowAttribute(Handle, attribute, ref value, sizeof(int));
+
+    private static int ColorRef(Color c) => c.R | (c.G << 8) | (c.B << 16);
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (!_reallyClose && e.CloseReason == CloseReason.UserClosing)
@@ -76,6 +316,12 @@ public sealed class MainForm : Form
             return;
         }
         base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _sampleTimer.Dispose();
+        base.Dispose(disposing);
     }
 
     public void CloseForReal()

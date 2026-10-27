@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { project, instance, sampleProjects, svc } from '../test/fixtures';
-import { activeProjectNames, enterAction, finderHits, pruneTabs, summaryTone, withNewlyActive } from './simple';
+import { activeProjectNames, enterAction, finderHits, miniGroups, pruneTabs, summaryTone, withNewlyActive } from './simple';
 
 describe('simple mode helpers', () => {
   it('lists every project main checkout for an empty query, disabled services hidden', () => {
@@ -43,5 +43,19 @@ describe('simple mode helpers', () => {
     const p = project('x', [instance('x', [svc('x', 'a', { state: 'running' }), svc('x', 'b', { state: 'crashed' })])]);
     expect(summaryTone(p.instances[0].services)).toBe('bad');
     expect(summaryTone([])).toBe('off');
+  });
+
+  it('compact view shows open and running repos, plus worktrees only while running', () => {
+    const ps = sampleProjects();
+    expect(miniGroups(ps, [], '').map((g) => g.instance.key)).toEqual(['other', 'panel-pro']);
+    ps[0].instances[1].services[0].state = 'running';
+    expect(miniGroups(ps, [], '').map((g) => g.instance.key)).toEqual(['other', 'panel-pro', 'panel-pro@feat-x']);
+    expect(miniGroups(ps, [], 'site').map((g) => g.instance.key)).toEqual(['other']);
+  });
+
+  it('compact view falls back to every repo when nothing is open or running', () => {
+    const ps = [project('a', [instance('a', [svc('a', 'x')])]), project('b', [instance('b', [svc('b', 'y')])])];
+    expect(miniGroups(ps, [], '').map((g) => g.instance.key)).toEqual(['a', 'b']);
+    expect(miniGroups(ps, ['b'], '').map((g) => g.instance.key)).toEqual(['b']);
   });
 });

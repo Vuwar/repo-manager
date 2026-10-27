@@ -27,6 +27,7 @@ import { useAppState } from '../state/store';
 
 interface Props {
   onFullView: () => void;
+  onCompact?: () => void;
 }
 
 function serviceHref(s: ServiceDto): string | undefined {
@@ -239,7 +240,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
 }
 
-export function SimpleView({ onFullView }: Props) {
+export function SimpleView({ onFullView, onCompact }: Props) {
   const projects = useAppState((s) => s.projects);
   const projectsError = useAppState((s) => s.projectsError);
   const connection = useAppState((s) => s.connection);
@@ -358,6 +359,11 @@ export function SimpleView({ onFullView }: Props) {
             <span className="sv-conn" role="status">
               <Spinner size={11} /> {connection === 'reconnecting' ? 'Reconnecting' : 'Connecting'}
             </span>
+          )}
+          {onCompact && (
+            <Button variant="ghost" icon="compact" onClick={onCompact} title="Small window with just start and stop buttons">
+              Compact
+            </Button>
           )}
           <Button variant="ghost" icon="menu" onClick={onFullView} title="Logs, config, ports and tasks">
             Full view

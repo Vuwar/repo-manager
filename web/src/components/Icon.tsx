@@ -83,6 +83,7 @@ const PATHS = {
     </>
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  compact: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
   external: (
     <>
       <path d="M13.5 4.5H19.5V10.5" />

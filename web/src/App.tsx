@@ -12,10 +12,12 @@ import { handleEvent, loadDaemonInfo, loadLogHistory, loadProjects } from './sta
 import { findInstance } from './state/reducer';
 import { dispatch, useAppState } from './state/store';
 import { shortName } from './lib/format';
+import { postMode, syncTitleBar } from './lib/host';
 import { readMode, saveMode, type UiMode } from './lib/simple';
 import { NoToken } from './views/NoToken';
 import { PortsView } from './views/PortsView';
 import { NoInstance, ProjectView } from './views/ProjectView';
+import { MiniView } from './views/MiniView';
 import { SimpleView } from './views/SimpleView';
 
 export function App() {
@@ -44,6 +46,10 @@ function Shell({ token }: { token: string }) {
     saveMode(m);
     setModeState(m);
   };
+  // The desktop shell shrinks the window for the compact view and restores it after.
+  useEffect(() => postMode(mode), [mode]);
+  // The window's title bar takes the app's colors, following the light/dark switch.
+  useEffect(() => syncTitleBar(), []);
   const configRequests = useAppState((s) => s.configRequests);
   // "Edit config" (e.g. from a failed-start toast) needs the full view: simple mode has no config tab.
   useEffect(() => {
@@ -101,7 +107,7 @@ function Shell({ token }: { token: string }) {
 
   // Ctrl+K or "/" focuses the sidebar quick filter (simple mode has its own search).
   useEffect(() => {
-    if (mode === 'simple') return;
+    if (mode !== 'full') return;
     const onKey = (e: KeyboardEvent) => {
       const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
       const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target);
@@ -136,7 +142,8 @@ function Shell({ token }: { token: string }) {
     };
   }, [current]);
 
-  if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} />;
+  if (mode === 'mini') return <MiniView onExpand={() => setMode('simple')} />;
+  if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} onCompact={() => setMode('mini')} />;
 
   let main;
   if (view.kind === 'ports') main = <PortsView />;

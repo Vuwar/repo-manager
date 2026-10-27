@@ -1,12 +1,15 @@
 import type { InstanceDto, ProjectDto, ServiceDto } from '../api/types';
 import { filterInstances } from './groups';
+import { isAmbientMode, type AmbientMode } from './ambient';
 import { isActive, stateTone, type StateTone } from './format';
 
-export type UiMode = 'simple' | 'full';
+export type UiMode = 'simple' | 'full' | 'mini';
 
 const MODE_KEY = 'repomanager.mode';
 const TABS_KEY = 'repomanager.simple.tabs';
 const ACTIVE_KEY = 'repomanager.simple.active';
+const PIN_KEY = 'repomanager.mini.pinned';
+const AMBIENT_KEY = 'repomanager.mini.ambient';
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -25,7 +28,10 @@ function write(key: string, value: unknown): void {
   }
 }
 
-export const readMode = (): UiMode => (read<string>(MODE_KEY, 'full') === 'simple' ? 'simple' : 'full');
+export const readMode = (): UiMode => {
+  const m = read<string>(MODE_KEY, 'full');
+  return m === 'simple' || m === 'mini' ? m : 'full';
+};
 export const saveMode = (m: UiMode) => write(MODE_KEY, m);
 export const readTabs = (): string[] => {
   const v = read<unknown>(TABS_KEY, []);
@@ -37,6 +43,13 @@ export const readActiveTab = (): string | null => {
   return typeof v === 'string' ? v : null;
 };
 export const saveActiveTab = (t: string | null) => write(ACTIVE_KEY, t);
+export const readPinned = (): boolean => read<unknown>(PIN_KEY, true) !== false;
+export const savePinned = (on: boolean) => write(PIN_KEY, on);
+export const readAmbient = (): AmbientMode => {
+  const v = read<unknown>(AMBIENT_KEY, 'glass');
+  return isAmbientMode(v) ? v : 'glass';
+};
+export const saveAmbient = (m: AmbientMode) => write(AMBIENT_KEY, m);
 
 /** Services shown in simple mode (disabled ones are hidden). */
 export function visibleServices(inst: InstanceDto): ServiceDto[] {
@@ -119,4 +132,23 @@ export function enterAction(hits: FinderHit[], query: string): EnterAction {
   const exact = hits.flatMap((h) => h.services).filter((s) => s.name.toLowerCase().includes(q));
   if (exact.length === 1 && !isActive(exact[0].state) && exact[0].state !== 'stopping') return { kind: 'start', service: exact[0] };
   return { kind: 'open', project: hits[0].project.name };
+}
+
+/**
+ * Rows for the compact view. With a query: the finder hits. Otherwise the working set:
+ * main checkouts of open tabs and running repos, plus worktrees that have something running.
+ * Falls back to every main checkout when the working set is empty.
+ */
+export function miniGroups(projects: ProjectDto[], tabs: string[], query: string): FinderHit[] {
+  if (query.trim()) return finderHits(projects, query);
+  const wanted = new Set([...tabs, ...activeProjectNames(projects)].map((n) => n.toLowerCase()));
+  const groups: FinderHit[] = [];
+  for (const p of [...projects].sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!wanted.has(p.name.toLowerCase())) continue;
+    p.instances.forEach((inst, i) => {
+      const services = visibleServices(inst);
+      if (i === 0 || services.some((s) => isActive(s.state))) groups.push({ project: p, instance: inst, services });
+    });
+  }
+  return groups.length ? groups : finderHits(projects, '');
 }
