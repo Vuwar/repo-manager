@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using RepoManager.Contracts;
+using RepoManager.Core.Agents;
 using RepoManager.Core.Config;
 using RepoManager.Core.Hooks;
 using RepoManager.Core.Ports;
@@ -233,6 +235,8 @@ public static class Api
 
         api.MapPost("/hook", (HookRequest req) => HookPolicy.Evaluate(req, Views.HookSnapshot(sup)));
 
+        MapTown(api, d);
+
         api.MapPost("/refresh", () =>
         {
             d.Config.Reload();
@@ -253,6 +257,77 @@ public static class Api
 
         // Embedded React UI.
         Ui.Map(app);
+    }
+
+    /// <summary>Agent Town: Claude Code sessions, their inboxes and permission prompts.</summary>
+    private static void MapTown(RouteGroupBuilder api, DaemonHost d)
+    {
+        var permissionMax = TimeSpan.FromMinutes(9);
+
+        api.MapPost("/town/hook", (TownHookEnvelope env) =>
+        {
+            var e = HookEventParser.Parse(env);
+            if (e == null) return ActionResultDto.Fail("not a town hook event");
+            d.Agents.Apply(e);
+            // The session moved on, so a prompt it showed in its own window was answered there.
+            if (e.Kind != "PermissionRequest") d.Permissions.ClearSession(e.SessionId);
+            return ActionResultDto.Success("ok");
+        });
+
+        api.MapPost("/town/permission", async (TownHookEnvelope env, HttpContext ctx) =>
+        {
+            var e = HookEventParser.Parse(env);
+            if (e is not { Kind: "PermissionRequest" }) return new PermissionDecisionDto(null, false);
+            d.Agents.Apply(e);
+            var prompt = new PermissionPromptDto
+            {
+                RequestId = Guid.NewGuid().ToString("N"),
+                ToolName = e.ToolName ?? "tool",
+                Summary = PermissionSummary(e),
+            };
+            return await d.Permissions.WaitAsync(e.SessionId, prompt, permissionMax, ctx.RequestAborted);
+        });
+
+        api.MapPost("/town/permission/answer", (PermissionAnswerRequest req) =>
+        {
+            if (req.Behavior is not ("allow" or "deny")) return ActionResultDto.Fail("behavior must be allow or deny");
+            return d.Permissions.Answer(req.RequestId, new PermissionDecisionDto(req.Behavior, req.Always))
+                ? ActionResultDto.Success("answered")
+                : ActionResultDto.Fail("that prompt is no longer waiting; answer it in the session window");
+        });
+
+        api.MapPost("/town/send", async (TownSendRequest req, HttpContext ctx) =>
+        {
+            if (d.Agents.Get(req.SessionId) == null) return ActionResultDto.Fail("unknown session");
+            if (d.Agents.InboxFor(req.SessionId) is not { } inbox) return ActionResultDto.Fail("this session has no inbox; open its window");
+            var (ok, message) = await AgentInbox.SendAsync(inbox.Socket, inbox.Token, req.Text, ctx.RequestAborted);
+            return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
+        });
+
+        api.MapPost("/town/focus", (TownFocusRequest req) =>
+        {
+            d.Permissions.SetFocused(req.Focused);
+            return ActionResultDto.Success(req.Focused ? "focused" : "unfocused");
+        });
+
+        api.MapGet("/town/sessions", () => d.Agents.Snapshot());
+    }
+
+    /// <summary>The command for shell tools, else the tool name.</summary>
+    private static string PermissionSummary(AgentHookEvent e)
+    {
+        if (e.ToolName is "Bash" or "PowerShell" && e.ToolInputJson != null)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(e.ToolInputJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("command", out var c) && c.ValueKind == JsonValueKind.String)
+                    return c.GetString()!;
+            }
+            catch (JsonException) { }
+        }
+        return e.ToolName ?? "tool";
     }
 
     private static IEnumerable<string> GroupServices(DaemonHost d, string tag, bool includeDisabled = false)

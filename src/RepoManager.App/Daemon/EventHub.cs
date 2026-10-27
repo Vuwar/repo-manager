@@ -1,30 +1,35 @@
 using System.Threading.Channels;
 using RepoManager.Contracts;
+using RepoManager.Core.Agents;
 using RepoManager.Core.Config;
 using RepoManager.Core.Logs;
 using RepoManager.Core.Processes;
 
 namespace RepoManager.App.Daemon;
 
-/// <summary>Fans out status, task, log and config events to SSE subscribers.</summary>
+/// <summary>Fans out status, task, log, config and Claude session events to SSE subscribers.</summary>
 public sealed class EventHub : IDisposable
 {
     private readonly Supervisor _supervisor;
     private readonly LogStore _logs;
     private readonly ConfigService _config;
+    private readonly AgentRegistry _agents;
     private readonly List<Subscriber> _subs = [];
 
     public event Action<ServiceDto>? StatusChanged;
 
-    public EventHub(Supervisor supervisor, LogStore logs, ConfigService config)
+    public EventHub(Supervisor supervisor, LogStore logs, ConfigService config, AgentRegistry agents)
     {
         _supervisor = supervisor;
         _logs = logs;
         _config = config;
+        _agents = agents;
         _supervisor.ServiceChanged += OnService;
         _supervisor.TaskChanged += OnTask;
         _logs.LineAdded += OnLog;
         _config.Changed += OnConfig;
+        _agents.Changed += OnAgent;
+        _agents.Ended += OnAgentEnd;
     }
 
     public sealed class Subscriber
@@ -68,6 +73,8 @@ public sealed class EventHub : IDisposable
     private void OnTask(TaskDto dto) => Publish(new EventDto { Type = "task", Payload = dto });
     private void OnLog(LogLineDto line) => Publish(new EventDto { Type = "log", Payload = line }, line.Source);
     private void OnConfig() => Publish(new EventDto { Type = "projects" });
+    private void OnAgent(AgentSessionDto dto) => Publish(new EventDto { Type = "agent", Payload = dto });
+    private void OnAgentEnd(string id) => Publish(new EventDto { Type = "agentEnd", Payload = new { id } });
 
     public void Dispose()
     {
@@ -75,6 +82,8 @@ public sealed class EventHub : IDisposable
         _supervisor.TaskChanged -= OnTask;
         _logs.LineAdded -= OnLog;
         _config.Changed -= OnConfig;
+        _agents.Changed -= OnAgent;
+        _agents.Ended -= OnAgentEnd;
         lock (_subs)
         {
             foreach (var s in _subs) s.Channel.Writer.TryComplete();

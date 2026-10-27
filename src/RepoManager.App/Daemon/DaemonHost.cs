@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RepoManager.Contracts;
+using RepoManager.Core.Agents;
 using RepoManager.Core.Config;
 using RepoManager.Core.Git;
 using RepoManager.Core.Logs;
@@ -18,7 +19,10 @@ namespace RepoManager.App.Daemon;
 /// <summary>Everything the daemon runs, minus the WinForms shell: core services plus the HTTP API.</summary>
 public sealed class DaemonHost : IAsyncDisposable
 {
+    private static readonly TimeSpan AgentMaxAge = TimeSpan.FromHours(8);
+
     private WebApplication? _web;
+    private readonly System.Threading.Timer _agentSweep;
 
     public string DataDir { get; }
     public string Token { get; }
@@ -32,6 +36,9 @@ public sealed class DaemonHost : IAsyncDisposable
     public LogStore Logs { get; }
     public Supervisor Supervisor { get; }
     public EventHub Events { get; }
+    /// <summary>Claude Code sessions on this machine, fed by <c>devm town-hook</c>.</summary>
+    public AgentRegistry Agents { get; }
+    public PermissionBroker Permissions { get; } = new();
 
     /// <summary>Raised when a second launch or the CLI asks to show the window.</summary>
     public event Action? ActivateRequested;
@@ -48,7 +55,12 @@ public sealed class DaemonHost : IAsyncDisposable
         State = new StateStore(dataDir);
         Logs = new LogStore(Path.Combine(dataDir, "logs"));
         Supervisor = new Supervisor(Config, State, Logs, null, options);
-        Events = new EventHub(Supervisor, Logs, Config);
+        Agents = new AgentRegistry(cwd => Config.InstanceForPath(cwd) is { } p ? (p.Project, p.Worktree) : null, () => DateTimeOffset.Now);
+        // The registry DTO carries the broker's prompts, so one "agent" event covers both.
+        Permissions.PromptsChanged += id => Agents.SetPrompts(id, Permissions.PromptsFor(id));
+        Agents.Ended += Permissions.ClearSession;
+        Events = new EventHub(Supervisor, Logs, Config, Agents);
+        _agentSweep = new System.Threading.Timer(_ => Agents.Sweep(AgentMaxAge), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 
     public async Task StartAsync()
@@ -106,6 +118,8 @@ public sealed class DaemonHost : IAsyncDisposable
     /// <summary>Stops every service (desired state kept for the next start) and the web server.</summary>
     public async ValueTask DisposeAsync()
     {
+        await _agentSweep.DisposeAsync();
+        Permissions.SetFocused(false);
         try { await Supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(20)); } catch { }
         try
         {

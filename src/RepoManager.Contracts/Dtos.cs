@@ -173,7 +173,8 @@ public sealed record DaemonInfoDto(string Version, int Pid, int Port, DateTimeOf
 
 public sealed record EventDto
 {
-    /// <summary>"status" (Payload = ServiceDto), "task" (TaskDto), "log" (LogLineDto), "projects" (no payload: project list changed).</summary>
+    /// <summary>"status" (Payload = ServiceDto), "task" (TaskDto), "log" (LogLineDto), "projects" (no payload: project list changed),
+    /// "agent" (AgentSessionDto: a Claude session appeared or changed), "agentEnd" ({ id }: a Claude session ended).</summary>
     public required string Type { get; init; }
     public object? Payload { get; init; }
 }
