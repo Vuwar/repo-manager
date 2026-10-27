@@ -5,13 +5,15 @@ using System.Text.Json.Nodes;
 namespace RepoManager.Cli;
 
 /// <summary>
-/// `devm claude-setup` / `devm claude-remove`: registers the MCP server, the PreToolUse hook and a marked block in
-/// the global CLAUDE.md. Every change is reversible; settings.json is backed up before it is written.
+/// `devm claude-setup` / `devm claude-remove`: registers the MCP server, the PreToolUse hook, the Agent Town hooks
+/// and a marked block in the global CLAUDE.md. Every change is reversible; settings.json is backed up before it is written.
 /// </summary>
 public static class ClaudeIntegration
 {
     public const string McpName = "repomanager";
     public const string HookMatcher = "Bash|PowerShell|mcp__Claude_Browser__preview_start";
+    /// <summary>Status events forwarded by <c>devm town-hook</c>; PermissionRequest is added separately (it may wait).</summary>
+    public static readonly string[] TownEvents = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "StopFailure", "SessionEnd"];
     public const string BlockStart = "<!-- repomanager:start -->";
     public const string BlockEnd = "<!-- repomanager:end -->";
 
@@ -34,7 +36,7 @@ public static class ClaudeIntegration
             ? d
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
 
-    public static int Setup(string devmPath, bool skipMcp)
+    public static int Setup(string devmPath, bool skipMcp, bool town = true)
     {
         Directory.CreateDirectory(ClaudeDir);
         var hookCommand = $"\"{devmPath}\" hook";
@@ -42,6 +44,10 @@ public static class ClaudeIntegration
         var settingsPath = Path.Combine(ClaudeDir, "settings.json");
         var changed = UpdateSettings(settingsPath, root => AddHook(root, hookCommand));
         Console.WriteLine(changed ? $"hook: added PreToolUse hook to {settingsPath}" : "hook: already present");
+        if (town)
+            Console.WriteLine(UpdateSettings(settingsPath, root => AddTownHooks(root, $"\"{devmPath}\" town-hook")) ? "town: added hooks" : "town: already present");
+        else if (UpdateSettings(settingsPath, RemoveTownHooks))
+            Console.WriteLine("town: hooks removed");
 
         var mdPath = Path.Combine(ClaudeDir, "CLAUDE.md");
         Console.WriteLine(WriteBlock(mdPath) ? $"CLAUDE.md: added RepoManager block to {mdPath}" : "CLAUDE.md: block up to date");
@@ -61,7 +67,10 @@ public static class ClaudeIntegration
     {
         var settingsPath = Path.Combine(ClaudeDir, "settings.json");
         if (File.Exists(settingsPath))
+        {
             Console.WriteLine(UpdateSettings(settingsPath, RemoveHook) ? "hook: removed" : "hook: not present");
+            Console.WriteLine(UpdateSettings(settingsPath, RemoveTownHooks) ? "town: hooks removed" : "town: not present");
+        }
         var mdPath = Path.Combine(ClaudeDir, "CLAUDE.md");
         if (File.Exists(mdPath))
             Console.WriteLine(RemoveBlock(mdPath) ? "CLAUDE.md: block removed" : "CLAUDE.md: no block");
@@ -125,6 +134,60 @@ public static class ClaudeIntegration
             if (list.Count == 0) pre.Remove(m);
         }
         if (pre.Count == 0) hooks.Remove("PreToolUse");
+        if (hooks.Count == 0) root.Remove("hooks");
+        return changed;
+    }
+
+    private static bool IsTownHook(JsonNode? h) =>
+        h?["command"]?.GetValue<string>() is { } c && c.TrimEnd().EndsWith(" town-hook", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// One town-hook entry per event. Status hooks run async (they never block the session) except SessionEnd, which
+    /// runs in line so it is delivered before the session exits. PermissionRequest may wait for a town answer.
+    /// </summary>
+    private static JsonObject TownEntry(string evt, string command)
+    {
+        var hook = new JsonObject { ["type"] = "command", ["command"] = command, ["timeout"] = evt == "PermissionRequest" ? 600 : 2 };
+        if (evt is not ("PermissionRequest" or "SessionEnd")) hook["async"] = true;
+        return new JsonObject { ["hooks"] = new JsonArray(hook) };
+    }
+
+    public static bool AddTownHooks(JsonObject root, string command)
+    {
+        string[] events = [.. TownEvents, "PermissionRequest"];
+        var hooks = root["hooks"] as JsonObject;
+        var upToDate = hooks != null && events.All(e =>
+            hooks[e] is JsonArray list
+            && list.OfType<JsonObject>().Where(m => (m["hooks"] as JsonArray)?.Any(IsTownHook) == true).ToList() is [var mine]
+            && JsonNode.DeepEquals(mine, TownEntry(e, command)));
+        if (upToDate) return false;
+        RemoveTownHooks(root);
+        hooks = root["hooks"] as JsonObject ?? new JsonObject();
+        foreach (var e in events)
+        {
+            var list = hooks[e] as JsonArray ?? new JsonArray();
+            list.Add(TownEntry(e, command));
+            hooks[e] = list;
+        }
+        root["hooks"] = hooks;
+        return true;
+    }
+
+    public static bool RemoveTownHooks(JsonObject root)
+    {
+        if (root["hooks"] is not JsonObject hooks) return false;
+        var changed = false;
+        foreach (var (evt, node) in hooks.ToList())
+        {
+            if (node is not JsonArray entries) continue;
+            foreach (var m in entries.OfType<JsonObject>().ToList())
+            {
+                if (m["hooks"] is not JsonArray list) continue;
+                foreach (var h in list.Where(IsTownHook).ToList()) { list.Remove(h); changed = true; }
+                if (list.Count == 0) entries.Remove(m);
+            }
+            if (entries.Count == 0) hooks.Remove(evt);
+        }
         if (hooks.Count == 0) root.Remove("hooks");
         return changed;
     }

@@ -27,7 +27,7 @@ public static class Cli
           devm mcp                                 MCP server over stdio (for Claude Code)
           devm hook                                Claude Code PreToolUse hook (reads JSON on stdin)
           devm town-hook                           Claude Code hook for Agent Town (reads JSON on stdin)
-          devm claude-setup [--no-mcp]             register MCP server, hook and CLAUDE.md block
+          devm claude-setup [--no-mcp] [--no-town] register MCP server, hooks and CLAUDE.md block
           devm claude-remove [--no-mcp]            undo claude-setup
 
         Full ids work anywhere: project/service, project@worktree/service.
@@ -49,7 +49,7 @@ public static class Cli
         if (cmd == "hook") return await Hook.RunAsync();
         if (cmd == "town-hook") return await TownHook.RunAsync();
         if (cmd == "mcp") return await Mcp.RunAsync(args.Skip(1).ToArray());
-        if (cmd == "claude-setup") return ClaudeIntegration.Setup(a.Value("devm") ?? Environment.ProcessPath!, a.Flag("no-mcp"));
+        if (cmd == "claude-setup") return ClaudeIntegration.Setup(a.Value("devm") ?? Environment.ProcessPath!, a.Flag("no-mcp"), !a.Flag("no-town"));
         if (cmd == "claude-remove") return ClaudeIntegration.Remove(a.Flag("no-mcp"));
 
         using var client = new DaemonClient();

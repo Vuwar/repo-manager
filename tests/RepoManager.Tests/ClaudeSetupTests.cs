@@ -81,6 +81,103 @@ public class ClaudeSetupTests : IDisposable
         Assert.Contains("RepoManager", File.ReadAllText(Path.Combine(_dir, "CLAUDE.md")));
     }
 
+    // ---- Agent Town hooks (run through devm.exe: the test project does not reference the CLI assembly) ----
+
+    private static readonly string[] TownEvents =
+        ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "StopFailure", "SessionEnd"];
+
+    private JsonNode ReadSettings() => JsonNode.Parse(File.ReadAllText(Path.Combine(_dir, "settings.json")))!;
+
+    private static IEnumerable<JsonNode> Commands(JsonNode settings) =>
+        settings["hooks"]?.AsObject().SelectMany(e => e.Value!.AsArray()).SelectMany(m => m!["hooks"]!.AsArray()).Select(h => h!)
+        ?? [];
+
+    [Fact]
+    public void AddTownHooks_AddsEachEvent()
+    {
+        Assert.Equal(0, Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe").Code);
+        var hooks = ReadSettings()["hooks"]!;
+        foreach (var e in TownEvents.Append("PermissionRequest"))
+        {
+            var entry = Assert.Single(hooks[e]!.AsArray())!;
+            Assert.Null(entry["matcher"]);
+            var h = Assert.Single(entry["hooks"]!.AsArray())!;
+            Assert.Equal("command", h["type"]!.GetValue<string>());
+            Assert.Equal("\"C:\\x\\devm.exe\" town-hook", h["command"]!.GetValue<string>());
+        }
+        Assert.Equal(600, hooks["PermissionRequest"]![0]!["hooks"]![0]!["timeout"]!.GetValue<int>());
+        Assert.Null(hooks["PermissionRequest"]![0]!["hooks"]![0]!["async"]);
+        Assert.Equal(2, hooks["Stop"]![0]!["hooks"]![0]!["timeout"]!.GetValue<int>());
+        Assert.True(hooks["Stop"]![0]!["hooks"]![0]!["async"]!.GetValue<bool>());
+        // SessionEnd runs synchronously so it is delivered before the session exits.
+        Assert.Null(hooks["SessionEnd"]![0]!["hooks"]![0]!["async"]);
+        // The user's own PreToolUse hook and the dev-server hook are untouched.
+        var pre = hooks["PreToolUse"]!.AsArray();
+        Assert.Equal(2, pre.Count);
+        Assert.Equal("Write", pre[0]!["matcher"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void AddTownHooks_Idempotent()
+    {
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        var again = Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        Assert.Contains("town: already present", again.Out);
+        Assert.Single(Directory.GetFiles(_dir, "settings.json.bak-*"));
+    }
+
+    [Fact]
+    public void AddTownHooks_NewDevmPath_ReplacesOldEntries()
+    {
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        Devm("claude-setup --no-mcp --devm C:\\y\\devm.exe");
+        var town = Commands(ReadSettings()).Where(h => h["command"]!.GetValue<string>().EndsWith(" town-hook")).ToList();
+        Assert.Equal(TownEvents.Length + 1, town.Count);
+        Assert.All(town, h => Assert.StartsWith("\"C:\\y\\", h["command"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void Setup_NoTown_SkipsTownHooks()
+    {
+        var setup = Devm("claude-setup --no-mcp --no-town --devm C:\\x\\devm.exe");
+        Assert.Equal(0, setup.Code);
+        Assert.DoesNotContain(Commands(ReadSettings()), h => h["command"]!.GetValue<string>().EndsWith(" town-hook"));
+        Assert.NotNull(ReadSettings()["hooks"]!["PreToolUse"]);
+    }
+
+    [Fact]
+    public void RemoveTownHooks_LeavesPreToolUseHookAndOthers()
+    {
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        var off = Devm("claude-setup --no-mcp --no-town --devm C:\\x\\devm.exe");
+        Assert.Contains("town: hooks removed", off.Out);
+        var hooks = ReadSettings()["hooks"]!.AsObject();
+        Assert.Equal(["PreToolUse"], hooks.Select(p => p.Key));
+        Assert.Equal(2, hooks["PreToolUse"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void RemoveHook_DoesNotTouchTownHooks()
+    {
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        // A new devm path makes AddHook remove and re-add the dev-server hook; town hooks must survive it.
+        Devm("claude-setup --no-mcp --no-town --devm C:\\x\\devm.exe");
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        var dev = Commands(ReadSettings()).Where(h => h["command"]!.GetValue<string>().EndsWith(" hook")).ToList();
+        Assert.Single(dev);
+        Assert.Equal(TownEvents.Length + 1, Commands(ReadSettings()).Count(h => h["command"]!.GetValue<string>().EndsWith(" town-hook")));
+    }
+
+    [Fact]
+    public void Remove_RemovesTownHooks()
+    {
+        Devm("claude-setup --no-mcp --devm C:\\x\\devm.exe");
+        Assert.Equal(0, Devm("claude-remove --no-mcp").Code);
+        var after = ReadSettings();
+        Assert.DoesNotContain(Commands(after), h => h["command"]!.GetValue<string>().Contains("devm"));
+        Assert.Equal("Write", Assert.Single(after["hooks"]!["PreToolUse"]!.AsArray())!["matcher"]!.GetValue<string>());
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, true); } catch { }
