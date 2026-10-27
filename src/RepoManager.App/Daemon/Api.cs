@@ -269,8 +269,9 @@ public static class Api
             var e = HookEventParser.Parse(env);
             if (e == null) return ActionResultDto.Fail("not a town hook event");
             d.Agents.Apply(e);
-            // The session moved on, so a prompt it showed in its own window was answered there.
-            if (e.Kind != "PermissionRequest") d.Permissions.ClearSession(e.SessionId);
+            // The session moved on, so a prompt it showed in its own window was answered there. Not on Notification:
+            // Claude Code reports the dialog it just opened for that same prompt.
+            if (e.Kind is not ("PermissionRequest" or "Notification")) d.Permissions.ClearSession(e.SessionId);
             return ActionResultDto.Success("ok");
         });
 
@@ -291,9 +292,11 @@ public static class Api
         api.MapPost("/town/permission/answer", (PermissionAnswerRequest req) =>
         {
             if (req.Behavior is not ("allow" or "deny")) return ActionResultDto.Fail("behavior must be allow or deny");
-            return d.Permissions.Answer(req.RequestId, new PermissionDecisionDto(req.Behavior, req.Always))
-                ? ActionResultDto.Success("answered")
-                : ActionResultDto.Fail("that prompt is no longer waiting; answer it in the session window");
+            var session = d.Permissions.SessionOf(req.RequestId);
+            if (session == null || !d.Permissions.Answer(req.RequestId, new PermissionDecisionDto(req.Behavior, req.Always)))
+                return ActionResultDto.Fail("that prompt is no longer waiting; answer it in the session window");
+            d.Agents.PromptAnswered(session);
+            return ActionResultDto.Success("answered");
         });
 
         api.MapPost("/town/send", async (TownSendRequest req, HttpContext ctx) =>

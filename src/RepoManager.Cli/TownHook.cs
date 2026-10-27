@@ -15,7 +15,8 @@ namespace RepoManager.Cli;
 /// PermissionRequest output, per the Claude Code hooks reference (code.claude.com/docs/en/hooks, checked 2026-10-27):
 ///   {"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}
 ///   "allow" may carry "updatedPermissions": an array of permission update entries; the input's
-///   "permission_suggestions" uses the same entries, and a hook may echo them back ("Always OK").
+///   "permission_suggestions" uses the same entries, and a hook may echo them back ("Always OK"). Each entry's
+///   "destination" (session, localSettings, projectSettings, userSettings) says where the rule is kept.
 ///   "deny" may carry "message" (tells Claude why) and "interrupt".
 /// </summary>
 public static class TownHook
@@ -81,8 +82,12 @@ public static class TownHook
     private static string DecisionJson(PermissionDecisionDto d, string? suggestionsJson)
     {
         var decision = new JsonObject { ["behavior"] = d.Behavior };
-        if (d.Behavior == "allow" && d.Always && suggestionsJson != null)
-            decision["updatedPermissions"] = JsonNode.Parse(suggestionsJson);
+        if (d.Behavior == "allow" && d.Always && JsonNode.Parse(suggestionsJson ?? "null") is JsonArray updates)
+        {
+            // "Always OK" lasts for this session only; suggestions may point at a settings file.
+            foreach (var u in updates.OfType<JsonObject>()) u["destination"] = "session";
+            decision["updatedPermissions"] = updates;
+        }
         if (d.Behavior == "deny")
             decision["message"] = "The user declined this in RepoManager Agent Town.";
         var output = new JsonObject

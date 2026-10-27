@@ -119,7 +119,7 @@ public sealed class DaemonHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _agentSweep.DisposeAsync();
-        Permissions.SetFocused(false);
+        Permissions.Dispose();
         try { await Supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(20)); } catch { }
         try
         {

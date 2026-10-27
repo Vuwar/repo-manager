@@ -44,6 +44,10 @@ public class PermissionBrokerTests
         _broker.SetFocused(false);
         Assert.Null((await a.WaitAsync(TimeSpan.FromSeconds(5))).Behavior);
         Assert.Null((await b.WaitAsync(TimeSpan.FromSeconds(5))).Behavior);
+        // Released prompts stay listed for "Answer in the window" until the session moves on.
+        Assert.False(Assert.Single(_broker.PromptsFor("s1")).Answerable);
+        Assert.False(_broker.Answer("r1", new("allow", false)));
+        _broker.ClearSession("s1");
         Assert.Empty(_broker.PromptsFor("s1"));
     }
 
@@ -67,7 +71,7 @@ public class PermissionBrokerTests
         var result = await _broker.WaitAsync("s1", Prompt("r1"), TimeSpan.FromMilliseconds(100), CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Null(result.Behavior);
-        Assert.Empty(_broker.PromptsFor("s1"));
+        Assert.False(Assert.Single(_broker.PromptsFor("s1")).Answerable);
     }
 
     [Fact]
@@ -79,6 +83,32 @@ public class PermissionBrokerTests
         cts.Cancel();
         Assert.Null((await task.WaitAsync(TimeSpan.FromSeconds(5))).Behavior);
         Assert.Empty(_broker.PromptsFor("s1"));
+    }
+
+    [Fact]
+    public async Task FocusLease_Expires_ReleasesWaits()
+    {
+        var broker = new PermissionBroker(TimeSpan.FromMilliseconds(150));
+        broker.SetFocused(true);
+        var task = broker.WaitAsync("s1", Prompt("r1"), Long, CancellationToken.None);
+        Assert.Null((await task.WaitAsync(TimeSpan.FromSeconds(5))).Behavior);
+        Assert.False(broker.Focused);
+    }
+
+    [Fact]
+    public async Task FocusLease_Renewed_KeepsWaiting()
+    {
+        var broker = new PermissionBroker(TimeSpan.FromMilliseconds(300));
+        broker.SetFocused(true);
+        var task = broker.WaitAsync("s1", Prompt("r1"), Long, CancellationToken.None);
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(60);
+            broker.SetFocused(true);
+        }
+        Assert.False(task.IsCompleted);
+        Assert.True(broker.Focused);
+        broker.SetFocused(false);
     }
 
     [Fact]

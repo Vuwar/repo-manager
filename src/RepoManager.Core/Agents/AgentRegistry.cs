@@ -10,12 +10,15 @@ namespace RepoManager.Core.Agents;
 public sealed class AgentRegistry(Func<string, (string Project, string? Worktree)?> resolve, Func<DateTimeOffset> clock)
 {
     private const int MessageMax = 140;
+    /// <summary>Status hooks run async, so one may land after SessionEnd; for this long it cannot bring the session back.</summary>
+    private static readonly TimeSpan EndedGrace = TimeSpan.FromMinutes(2);
     private static readonly HashSet<string> WaitingNotifications =
         ["permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"];
 
     private readonly object _gate = new();
     private readonly Dictionary<string, AgentSessionDto> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Socket, string Token)> _inboxes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _ended = new(StringComparer.Ordinal);
 
     public event Action<AgentSessionDto>? Changed;
     public event Action<string>? Ended;
@@ -27,16 +30,22 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         bool ended = false;
         lock (_gate)
         {
+            var now = clock();
             if (e.Kind == "SessionEnd")
             {
                 ended = _sessions.Remove(e.SessionId);
                 _inboxes.Remove(e.SessionId);
+                _ended[e.SessionId] = now;
+            }
+            else if (e.Kind != "SessionStart" && _ended.TryGetValue(e.SessionId, out var endedAt) && now - endedAt < EndedGrace)
+            {
+                return null;
             }
             else
             {
+                _ended.Remove(e.SessionId);
                 if (!string.IsNullOrEmpty(e.Socket) && !string.IsNullOrEmpty(e.Token))
                     _inboxes[e.SessionId] = (e.Socket, e.Token);
-                var now = clock();
                 var current = _sessions.GetValueOrDefault(e.SessionId) ?? Create(e, now);
                 updated = Next(current, e) with
                 {
@@ -84,13 +93,28 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         Changed?.Invoke(updated);
     }
 
+    /// <summary>The user answered a prompt in the town: with none left, the session goes back to work.</summary>
+    public void PromptAnswered(string sessionId)
+    {
+        AgentSessionDto? updated;
+        lock (_gate)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var current) || current.State != "waiting" || current.Prompts.Count > 0) return;
+            updated = current with { State = "working", Message = "Permission answered", Since = clock() };
+            _sessions[sessionId] = updated;
+        }
+        Changed?.Invoke(updated);
+    }
+
     /// <summary>Drops sessions with no hook event for longer than maxAge. Returns how many were dropped.</summary>
     public int Sweep(TimeSpan maxAge)
     {
         List<string> removed;
         lock (_gate)
         {
-            var cutoff = clock() - maxAge;
+            var now = clock();
+            var cutoff = now - maxAge;
+            foreach (var id in _ended.Where(p => now - p.Value >= EndedGrace).Select(p => p.Key).ToList()) _ended.Remove(id);
             removed = _sessions.Values.Where(s => s.Touched < cutoff).Select(s => s.Id).ToList();
             foreach (var id in removed)
             {

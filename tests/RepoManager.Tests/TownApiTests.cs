@@ -137,12 +137,28 @@ public class TownApiTests(DaemonFixture f)
             Assert.True(p.Answerable);
             Assert.True((await f.Post("api/town/permission/answer", new PermissionAnswerRequest(p.RequestId, "allow", false))).Ok);
             Assert.Equal("allow", (await t.WaitAsync(TimeSpan.FromSeconds(5))).Behavior);
+            var s = await Session(id);
+            Assert.Empty(s!.Prompts);
+            Assert.Equal("working", s.State);
         }
         finally
         {
             await Focus(false);
             await PostHook(HookJson("SessionEnd", id));
         }
+    }
+
+    [Fact]
+    public async Task Permission_Unfocused_ThenNotification_StillListed()
+    {
+        var id = NewId();
+        await Focus(false);
+        await PostPermission(id);
+        // Claude Code shows its dialog and reports it; the town keeps "Answer in the window".
+        await PostHook(HookJson("Notification", id, extra: "\"notification_type\":\"permission_prompt\",\"message\":\"Claude needs your permission to use Bash\""));
+        var p = Assert.Single((await Session(id))!.Prompts);
+        Assert.Equal("npm install", p.Summary);
+        await PostHook(HookJson("SessionEnd", id));
     }
 
     [Fact]
@@ -251,7 +267,7 @@ public class TownApiTests(DaemonFixture f)
         {
             var json = HookJson("PermissionRequest", id, extra:
                 "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm test\"},"
-                + "\"permission_suggestions\":[{\"type\":\"addRules\",\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"npm test\"}],\"behavior\":\"allow\",\"destination\":\"session\"}]");
+                + "\"permission_suggestions\":[{\"type\":\"addRules\",\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"npm test\"}],\"behavior\":\"allow\",\"destination\":\"localSettings\"}]");
             var run = TownHook(Utf8(json));
             var p = await WaitForPrompt(id);
             Assert.True((await f.Post("api/town/permission/answer", new PermissionAnswerRequest(p.RequestId, "allow", true))).Ok);
@@ -264,6 +280,8 @@ public class TownApiTests(DaemonFixture f)
             Assert.Equal("allow", decision.GetProperty("behavior").GetString());
             var update = Assert.Single(decision.GetProperty("updatedPermissions").EnumerateArray());
             Assert.Equal("addRules", update.GetProperty("type").GetString());
+            // "Always OK" is for this session only, never a rule written to disk.
+            Assert.Equal("session", update.GetProperty("destination").GetString());
         }
         finally
         {

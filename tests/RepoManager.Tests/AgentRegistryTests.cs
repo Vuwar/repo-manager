@@ -161,6 +161,46 @@ public class AgentRegistryTests
     }
 
     [Fact]
+    public void PromptAnswered_NoPromptsLeft_BackToWorking()
+    {
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "go"));
+        _reg.SetPrompts("s1", [new PermissionPromptDto { RequestId = "r1", ToolName = "Bash", Summary = "ls", Answerable = true }]);
+        _reg.SetPrompts("s1", []);
+        _reg.PromptAnswered("s1");
+        Assert.Equal("working", _reg.Snapshot().Single().State);
+    }
+
+    [Fact]
+    public void PromptAnswered_OtherPromptStillListed_StaysWaiting()
+    {
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "go"));
+        _reg.SetPrompts("s1", [new PermissionPromptDto { RequestId = "r2", ToolName = "Bash", Summary = "ls", Answerable = true }]);
+        _reg.PromptAnswered("s1");
+        Assert.Equal("waiting", _reg.Snapshot().Single().State);
+    }
+
+    [Fact]
+    public void LateEventAfterSessionEnd_Ignored()
+    {
+        _reg.Apply(Ev("SessionStart"));
+        _reg.Apply(Ev("SessionEnd"));
+        Assert.Null(_reg.Apply(Ev("PostToolUse", tool: "Bash", socket: "p", token: "t")));
+        Assert.Empty(_reg.Snapshot());
+        Assert.Null(_reg.InboxFor("s1"));
+        // A resumed session with the same id starts again.
+        Assert.Equal("idle", _reg.Apply(Ev("SessionStart"))!.State);
+    }
+
+    [Fact]
+    public void LateEventLongAfterSessionEnd_Recreates()
+    {
+        _reg.Apply(Ev("SessionStart"));
+        _reg.Apply(Ev("SessionEnd"));
+        _now += TimeSpan.FromMinutes(3);
+        Assert.NotNull(_reg.Apply(Ev("PostToolUse", tool: "Bash")));
+    }
+
+    [Fact]
     public void Token_NeverInDto()
     {
         _reg.Apply(Ev("SessionStart", socket: @"\\.\pipe\x", token: "secret-token-123"));
