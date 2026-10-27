@@ -73,7 +73,7 @@ layer every value comes from.
 |---|---|
 | `command`, `args`, `cwd`, `env` | What to run (through `cmd.exe`, so `npm`, `.bat` and `.cmd` work), from where (relative to the repo). |
 | `port` | Fixed port. Start fails with the owner's details if it is taken (`--kill-owner` kills that owner; `--new-port` starts this run on a free port when args/env use `${port:<name>}`). |
-| `autoPort` | Use `port` when free, otherwise a free port in 20000–29999. |
+| `autoPort` | Use `port` when free, otherwise the first free port of `port`+1 … `port`+10 that no other service configures, otherwise a free port in 20000–29999. |
 | `url`, `health` | Link shown in the UI; health URL for readiness (2xx) and health checks every 10 s. |
 | `dependsOn` | Started first, and must be ready before this one starts. |
 | `prepare` | Steps before start; `if` supports `exists(path)` and `!exists(path)`. |
@@ -85,8 +85,9 @@ Variables: `${port:<service>}` (the port a service really got), `${root}` (check
 
 ### Worktrees
 
-Worktrees of a registered repo show up automatically (`project@<folder>`). Their services always get their own ports
-from 20000–29999, kept between restarts. A service that has a fixed port and never mentions `${port:...}` would clash
+Worktrees of a registered repo show up automatically (`project@<folder>`). Their services always get their own ports,
+kept between restarts: one of the 10 ports after the configured port that no other service configures, otherwise one
+from 20000–29999. A service that has a fixed port and never mentions `${port:...}` would clash
 with the main checkout, so it is refused in worktrees (`--force` overrides). Fix it by reading the port from an
 argument or environment variable, e.g. `"args": ["run", "--urls", "http://127.0.0.1:${port:api}"]`.
 

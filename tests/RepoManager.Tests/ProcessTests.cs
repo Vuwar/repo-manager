@@ -104,4 +104,13 @@ public class ManagedProcessTests
         Assert.NotEqual(20001, got);
         Assert.InRange(got!.Value, PortAllocator.RangeStart, PortAllocator.RangeEnd);
     }
+
+    [Fact]
+    public void Nearby_tries_the_ports_after_the_configured_one()
+    {
+        var a = new PortAllocator(p => p != 5174);
+        Assert.Equal(5176, a.Nearby(new HashSet<int> { 5175 }, 5173));
+        Assert.Null(new PortAllocator(_ => false).Nearby(new HashSet<int>(), 5173));
+        Assert.Null(a.Nearby(new HashSet<int>(), 65535));
+    }
 }

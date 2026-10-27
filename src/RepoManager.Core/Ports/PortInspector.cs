@@ -138,13 +138,26 @@ public static class PortInspector
     }
 }
 
-/// <summary>Picks ports from 20000–29999, avoiding busy ports and ports already given out.</summary>
+/// <summary>
+/// Picks fallback ports: first the few ports after a service's configured one, then 20000–29999. Avoids busy
+/// ports and ports already given out.
+/// </summary>
 public sealed class PortAllocator
 {
-    public const int RangeStart = 20000, RangeEnd = 29999;
+    public const int RangeStart = 20000, RangeEnd = 29999, NearbyCount = 10;
     private readonly Func<int, bool> _isFree;
 
     public PortAllocator(Func<int, bool>? isFree = null) => _isFree = isFree ?? PortInspector.IsFree;
+
+    /// <summary>First free port in configured+1 … configured+<see cref="NearbyCount"/>, or null.</summary>
+    public int? Nearby(ISet<int> taken, int configured)
+    {
+        for (var p = configured + 1; p <= Math.Min(configured + NearbyCount, 65535); p++)
+            if (!taken.Contains(p) && _isFree(p)) return p;
+        return null;
+    }
+
+    public static bool IsNearby(int port, int configured) => port > configured && port <= configured + NearbyCount;
 
     public int? Allocate(ISet<int> taken, int? preferred = null)
     {

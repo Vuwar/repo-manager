@@ -73,7 +73,8 @@ public class WorktreeTests : IDisposable
             var main = sup.Find("shop/api")!;
             var copy = sup.Find("shop@shop-feat/api")!;
             Assert.Equal(_port, main.Port);
-            Assert.InRange(copy.Port!.Value, PortAllocator.RangeStart, PortAllocator.RangeEnd);
+            // Next to the main checkout's port, skipping _port + 1, which "legacy" configures.
+            Assert.InRange(copy.Port!.Value, _port + 2, _port + PortAllocator.NearbyCount);
             Assert.True(PortInspector.IsListening(copy.Port.Value));
             var sticky = copy.Port;
 

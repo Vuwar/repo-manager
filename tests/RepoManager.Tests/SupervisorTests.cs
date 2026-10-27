@@ -130,6 +130,27 @@ public class SupervisorTests
     }
 
     [Fact]
+    public async Task Auto_port_falls_back_to_a_nearby_port_that_no_other_service_configures()
+    {
+        var port = TestEnv.FreePort();
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        using var h = new Harness(Services(new
+        {
+            api = Harness.Fake("--port-env API_PORT", new { port, autoPort = true, env = new Dictionary<string, string> { ["API_PORT"] = "${port:api}" } }),
+            other = Harness.Fake($"--port {port + 1}", new { port = port + 1 }),
+        }));
+        try
+        {
+            var res = await h.Supervisor.StartAsync(h.Id("api"));
+            Assert.True(res.Ok, res.Error);
+            // port + 1 is free but belongs to "other", so the first candidate is port + 2.
+            Assert.InRange(h.Supervisor.Find(h.Id("api"))!.Port!.Value, port + 2, port + PortAllocator.NearbyCount);
+        }
+        finally { listener.Stop(); }
+    }
+
+    [Fact]
     public async Task Busy_port_of_a_movable_service_offers_and_supports_a_new_port()
     {
         var port = TestEnv.FreePort();

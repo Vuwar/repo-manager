@@ -423,11 +423,14 @@ public sealed class Supervisor : IDisposable
             if (!r.IsWorktree && cfg.Port is int preferred && !taken.Contains(preferred) && PortInspector.IsFree(preferred))
                 return new(preferred, null);
             var sticky = _state.GetPort(r.InstanceKey, r.Name);
-            if (sticky is int s && !taken.Contains(s) && PortInspector.IsFree(s)) return new(s, null);
+            var stickyFree = sticky is int s && !taken.Contains(s) && PortInspector.IsFree(s);
+            // A sticky port far from the configured one (picked from the range) gives way to a free nearby port.
+            if (stickyFree && (cfg.Port is not int c || PortAllocator.IsNearby(sticky!.Value, c))) return new(sticky, null);
             if (r.IsWorktree && !r.WorktreeReady && cfg.Port is int fixedPort)
                 return CheckFixed(r, fixedPort, options); // --force on a worktree that cannot move its port
             taken.UnionWith(_state.AllStickyPorts());
-            var p = _allocator.Allocate(taken);
+            taken.UnionWith(ConfiguredPorts(r.Id));
+            var p = (cfg.Port is int near ? _allocator.Nearby(taken, near) : null) ?? (stickyFree ? sticky : _allocator.Allocate(taken));
             if (p == null) return new(null, $"no free port in {PortAllocator.RangeStart}-{PortAllocator.RangeEnd}");
             _state.SetPort(r.InstanceKey, r.Name, p.Value);
             return new(p, null);
@@ -446,7 +449,8 @@ public sealed class Supervisor : IDisposable
         taken.UnionWith(_state.AllStickyPorts());
         if (r.Config.Port is int configured) taken.Add(configured);
         if (r.Port is int current) taken.Add(current);
-        var p = _allocator.Allocate(taken);
+        taken.UnionWith(ConfiguredPorts(r.Id));
+        var p = Fallback(taken, r.Config.Port);
         if (p == null) return new(null, $"no free port in {PortAllocator.RangeStart}-{PortAllocator.RangeEnd}");
         if (r.IsWorktree || r.Config.AutoPort) _state.SetPort(r.InstanceKey, r.Name, p.Value);
         r.Log.Append(LogStream.Sys, $"moving {r.Id} to new port {p}");
@@ -505,6 +509,15 @@ public sealed class Supervisor : IDisposable
     private HashSet<int> TakenPorts(ServiceRunner except) =>
         Runners.Where(x => x != except && x.IsActive && x.Port != null).Select(x => x.Port!.Value).ToHashSet();
 
+    /// <summary>Ports other services configure, in any project, so a fallback port never takes one of them.</summary>
+    private HashSet<int> ConfiguredPorts(string exceptId) =>
+        Runners.Where(x => !string.Equals(x.Id, exceptId, StringComparison.OrdinalIgnoreCase) && x.Config.Port != null)
+            .Select(x => x.Config.Port!.Value).ToHashSet();
+
+    /// <summary>A port just after the configured one when there is one, else one from the range.</summary>
+    private int? Fallback(ISet<int> taken, int? configured) =>
+        (configured is int c ? _allocator.Nearby(taken, c) : null) ?? _allocator.Allocate(taken);
+
     /// <summary>Ports for ${port:...}: actual ports of running services, planned ports for the rest.</summary>
     private Variables.Context VariableContext(ProjectConfig inst, ServiceRunner? self)
     {
@@ -522,7 +535,8 @@ public sealed class Supervisor : IDisposable
                 {
                     var taken = Runners.Where(x => x.Port != null).Select(x => x.Port!.Value).ToHashSet();
                     taken.UnionWith(_state.AllStickyPorts());
-                    var p = _allocator.Allocate(taken);
+                    taken.UnionWith(ConfiguredPorts(Ids.Service(inst.InstanceKey, s.Name)));
+                    var p = Fallback(taken, s.Port);
                     if (p != null) { _state.SetPort(inst.InstanceKey, s.Name, p.Value); ports[s.Name] = p.Value; }
                 }
             }
