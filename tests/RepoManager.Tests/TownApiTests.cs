@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using RepoManager.Contracts;
 
@@ -187,6 +189,121 @@ public class TownApiTests(DaemonFixture f)
         var raw = await f.Http.GetStringAsync("api/town/sessions");
         Assert.Contains(id, raw);
         Assert.DoesNotContain("very-secret-token-42", raw);
+        await PostHook(HookJson("SessionEnd", id));
+    }
+
+    // ---- devm town-hook (the real devm.exe against the fixture daemon) ----
+
+    private async Task<(int Code, string Out, TimeSpan Took)> TownHook(byte[] stdin, string? home = null, string entrypoint = "cli")
+    {
+        var psi = new ProcessStartInfo(CliTests.DevmExe, "town-hook")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            StandardOutputEncoding = Encoding.UTF8,
+        };
+        psi.Environment["REPOMANAGER_HOME"] = home ?? f.Home;
+        psi.Environment["REPOMANAGER_EXE"] = "C:\\does-not-exist.exe"; // never spawn a real app from tests
+        psi.Environment["CLAUDE_CODE_ENTRYPOINT"] = entrypoint;
+        var sw = Stopwatch.StartNew();
+        using var p = Process.Start(psi)!;
+        await p.StandardInput.BaseStream.WriteAsync(stdin);
+        p.StandardInput.Close();
+        var output = await p.StandardOutput.ReadToEndAsync();
+        await p.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        return (p.ExitCode, output, sw.Elapsed);
+    }
+
+    private static byte[] Utf8(string s) => Encoding.UTF8.GetBytes(s);
+
+    [Fact]
+    public async Task TownHook_StatusEvent_PostsAndExitsZero()
+    {
+        var id = NewId();
+        var json = HookJson("Stop", id, extra: "\"last_assistant_message\":\"Done here.\"");
+        var (code, output, _) = await TownHook([.. Encoding.UTF8.GetPreamble(), .. Utf8(json)]);
+        Assert.Equal(0, code);
+        Assert.Equal("", output);
+        var s = await Session(id);
+        Assert.Equal("done", s?.State);
+        Assert.Equal("terminal", s?.Surface);
+        await PostHook(HookJson("SessionEnd", id));
+    }
+
+    [Fact]
+    public async Task TownHook_NoDaemon_ExitsZeroFast()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "rm-tests", "empty-" + Guid.NewGuid().ToString("N")[..6]);
+        var (code, output, took) = await TownHook(Utf8(HookJson("Stop", NewId())), home);
+        Assert.Equal(0, code);
+        Assert.Equal("", output);
+        Assert.True(took < TimeSpan.FromSeconds(1.5), took.ToString());
+        Assert.False(File.Exists(Protocol.DaemonInfoPath(home)));
+    }
+
+    [Fact]
+    public async Task TownHook_Permission_PrintsDecision()
+    {
+        var id = NewId();
+        await Focus(true);
+        try
+        {
+            var json = HookJson("PermissionRequest", id, extra:
+                "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm test\"},"
+                + "\"permission_suggestions\":[{\"type\":\"addRules\",\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"npm test\"}],\"behavior\":\"allow\",\"destination\":\"session\"}]");
+            var run = TownHook(Utf8(json));
+            var p = await WaitForPrompt(id);
+            Assert.True((await f.Post("api/town/permission/answer", new PermissionAnswerRequest(p.RequestId, "allow", true))).Ok);
+            var (code, output, _) = await run;
+            Assert.Equal(0, code);
+            using var doc = JsonDocument.Parse(output);
+            var hso = doc.RootElement.GetProperty("hookSpecificOutput");
+            Assert.Equal("PermissionRequest", hso.GetProperty("hookEventName").GetString());
+            var decision = hso.GetProperty("decision");
+            Assert.Equal("allow", decision.GetProperty("behavior").GetString());
+            var update = Assert.Single(decision.GetProperty("updatedPermissions").EnumerateArray());
+            Assert.Equal("addRules", update.GetProperty("type").GetString());
+        }
+        finally
+        {
+            await Focus(false);
+            await PostHook(HookJson("SessionEnd", id));
+        }
+    }
+
+    [Fact]
+    public async Task TownHook_Permission_Deny_PrintsDenyWithMessage()
+    {
+        var id = NewId();
+        await Focus(true);
+        try
+        {
+            var run = TownHook(Utf8(HookJson("PermissionRequest", id, extra: "\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm x\"}")));
+            var p = await WaitForPrompt(id);
+            await f.Post("api/town/permission/answer", new PermissionAnswerRequest(p.RequestId, "deny", false));
+            var (code, output, _) = await run;
+            Assert.Equal(0, code);
+            using var doc = JsonDocument.Parse(output);
+            var decision = doc.RootElement.GetProperty("hookSpecificOutput").GetProperty("decision");
+            Assert.Equal("deny", decision.GetProperty("behavior").GetString());
+            Assert.False(string.IsNullOrEmpty(decision.GetProperty("message").GetString()));
+        }
+        finally
+        {
+            await Focus(false);
+            await PostHook(HookJson("SessionEnd", id));
+        }
+    }
+
+    [Fact]
+    public async Task TownHook_Permission_NoDecision_PrintsNothing()
+    {
+        var id = NewId();
+        await Focus(false);
+        var (code, output, _) = await TownHook(Utf8(HookJson("PermissionRequest", id, extra: "\"tool_name\":\"Bash\"")));
+        Assert.Equal(0, code);
+        Assert.Equal("", output);
         await PostHook(HookJson("SessionEnd", id));
     }
 }

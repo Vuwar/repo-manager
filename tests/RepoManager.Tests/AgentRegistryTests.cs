@@ -80,6 +80,17 @@ public class AgentRegistryTests
     }
 
     [Fact]
+    public void StopFailure_Failed_KeepsUntilNextPrompt()
+    {
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "go"));
+        var s = _reg.Apply(Ev("StopFailure", lastReply: "API Error: Rate limit reached"))!;
+        Assert.Equal("failed", s.State);
+        Assert.Equal("API Error: Rate limit reached", s.Message);
+        Assert.Equal("failed", _reg.Apply(Ev("PostToolUse", tool: "Bash"))!.State);
+        Assert.Equal("working", _reg.Apply(Ev("UserPromptSubmit", prompt: "retry"))!.State);
+    }
+
+    [Fact]
     public void Since_ChangesOnlyOnStateChange()
     {
         var first = _reg.Apply(Ev("PostToolUse", tool: "Bash"))!;

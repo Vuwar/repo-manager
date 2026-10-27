@@ -124,11 +124,13 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     {
         "SessionStart" => s with { State = "idle", Message = "Session started" },
         "UserPromptSubmit" => s with { State = "working", Prompt = e.Prompt, Message = Clip(e.Prompt ?? "") },
-        // done stays until the next prompt.
-        "PostToolUse" when s.State != "done" => s with { State = "working", Message = "Used " + e.ToolName },
+        // done and failed stay until the next prompt.
+        "PostToolUse" when s.State is not ("done" or "failed") => s with { State = "working", Message = "Used " + e.ToolName },
         "Notification" when e.NotificationType is { } t && WaitingNotifications.Contains(t) =>
             s with { State = "waiting", Message = Clip(e.Message ?? "Needs you") },
         "Stop" => s with { State = "done", LastReply = e.LastReply, Message = Clip(e.LastReply ?? "Done") },
+        // StopFailure: the turn ended on an API error; last_assistant_message is the error text.
+        "StopFailure" => s with { State = "failed", Message = Clip(e.LastReply ?? "Failed") },
         // PermissionRequest: the permission broker owns the waiting state.
         _ => s,
     };

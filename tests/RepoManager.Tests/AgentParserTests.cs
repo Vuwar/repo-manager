@@ -63,6 +63,14 @@ public class AgentParserTests
         Assert.NotNull(Parse("{\"hook_event_name\":\"SessionStart\",\"session_id\":\"" + new string('a', 80) + "\",\"cwd\":\"C:\\\\r\"}"));
 
     [Fact]
+    public void Parse_StopFailure_TakesErrorText()
+    {
+        var e = Parse("""{"hook_event_name":"StopFailure","session_id":"abc","cwd":"C:\\r","error":"rate_limit","last_assistant_message":"API Error: Rate limit reached"}""");
+        Assert.Equal("StopFailure", e!.Kind);
+        Assert.Equal("API Error: Rate limit reached", e.LastReply);
+    }
+
+    [Fact]
     public void Parse_UnknownEvent_ReturnsNull() =>
         Assert.Null(Parse("""{"hook_event_name":"PreCompact","session_id":"abc","cwd":"C:\\r"}"""));
 

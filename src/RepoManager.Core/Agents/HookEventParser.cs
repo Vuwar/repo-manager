@@ -24,7 +24,7 @@ public static class HookEventParser
 {
     public static readonly IReadOnlySet<string> Kinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "PermissionRequest", "Stop", "SessionEnd",
+        "SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "PermissionRequest", "Stop", "StopFailure", "SessionEnd",
     };
 
     /// <summary>Null for bad JSON, an event the town does not use, or a missing or unsafe session id.</summary>
