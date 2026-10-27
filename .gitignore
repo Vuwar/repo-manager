@@ -488,3 +488,6 @@ web/dist/
 src/RepoManager.App/wwwroot/
 artifacts/
 
+
+# Superpowers plan workspaces
+.superpowers/
