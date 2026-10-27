@@ -1,0 +1,73 @@
+<style>
+.sky{width:100%;align-self:stretch;background:linear-gradient(#3a3478,#f07b5a);position:relative;height:230px;overflow:hidden;border-radius:4px;font-family:monospace}
+.road{position:absolute;left:0;right:0;bottom:0;height:34px;background:#c9a870}
+.grass{position:absolute;left:0;right:0;bottom:34px;height:22px;background:#5ea24f}
+.hill{position:absolute;left:0;right:0;bottom:56px;height:60px;background:#4e8068}
+.b{position:absolute;bottom:56px;width:54px;background:#d98b6a;border:2px solid #6e2d24;color:#fff;font-size:9px;text-align:center;padding-top:4px}
+.b .bc{width:8px;height:8px;margin:0 auto 3px;border-radius:50%}
+.s{position:absolute;bottom:116px;width:12px;height:12px;background:#8790c2;border:1px solid #263c5f}
+.s.on{background:#ffd36b;box-shadow:0 0 6px #ffd36b}
+.w{position:absolute;bottom:40px;width:6px;height:12px}
+.tag{position:absolute;font-size:9px;color:#fff;background:rgba(13,17,40,.8);padding:2px 5px}
+.mini{position:absolute;left:8px;right:8px;bottom:4px;height:10px;background:rgba(13,17,40,.7);border-radius:2px}
+.mini i{position:absolute;top:2px;width:4px;height:6px}
+.dist{position:absolute;top:10px;bottom:10px;border:2px dashed rgba(255,255,255,.5);border-radius:6px;color:#fff;font-size:10px;padding:4px}
+</style>
+
+<h2>30 repos: which town layout feels right?</h2>
+<p class="subtitle">Repos with Claude sessions get priority in all three. Amber = needs you, blue = working, green = done. Small lit windows = dev server running.</p>
+
+<div class="cards">
+
+<div class="card" data-choice="a" onclick="toggleSelect(this)">
+<div class="card-image"><div class="sky">
+  <div class="hill"></div>
+  <!-- back row: all other projects as small houses -->
+  <div class="s on" style="left:10px"></div><div class="s" style="left:28px"></div><div class="s on" style="left:46px"></div><div class="s" style="left:64px"></div><div class="s" style="left:82px"></div><div class="s on" style="left:100px"></div><div class="s" style="left:118px"></div><div class="s" style="left:136px"></div><div class="s" style="left:154px"></div><div class="s on" style="left:172px"></div><div class="s" style="left:190px"></div><div class="s" style="left:208px"></div><div class="s" style="left:226px"></div><div class="s" style="left:244px"></div><div class="s on" style="left:262px"></div><div class="s" style="left:280px"></div><div class="s" style="left:298px"></div><div class="s" style="left:316px"></div><div class="s" style="left:334px"></div>
+  <div class="grass"></div><div class="road"></div>
+  <div class="b" style="left:12px;height:62px"><div class="bc" style="background:#ffc857"></div>kodex</div>
+  <div class="b" style="left:80px;height:70px;background:#7fa6d6"><div class="bc" style="background:#6cc3ff"></div>pathly</div>
+  <div class="b" style="left:148px;height:58px;background:#8fb58a"><div class="bc" style="background:#6cc3ff"></div>repo-mgr</div>
+  <div class="b" style="left:216px;height:66px;background:#ae92c4"><div class="bc" style="background:#7ee081"></div>ai-shell</div>
+  <div class="b" style="left:284px;height:60px;background:#c8a96b"><div class="bc" style="background:#8790c2"></div>portfolio</div>
+  <div class="w" style="left:40px;background:#ffc857"></div><div class="w" style="left:100px;background:#6cc3ff"></div><div class="w" style="left:112px;background:#6cc3ff"></div><div class="w" style="left:170px;background:#6cc3ff"></div><div class="w" style="left:240px;background:#7ee081"></div>
+</div></div>
+<div class="card-body"><h3>A. Main Street + hillside</h3>
+<p>Front row: only repos with a Claude session, big, sorted with "needs you" on the left. The other ~25 projects sit as tiny houses on the hill behind, with lit windows when a dev server runs. A repo moves down to Main Street when a session starts in it.</p></div>
+</div>
+
+<div class="card" data-choice="b" onclick="toggleSelect(this)">
+<div class="card-image"><div class="sky">
+  <div class="hill"></div><div class="grass"></div><div class="road"></div>
+  <div class="b" style="left:-20px;height:60px;background:#c8a96b">..</div>
+  <div class="b" style="left:48px;height:66px"><div class="bc" style="background:#ffc857"></div>kodex</div>
+  <div class="b" style="left:116px;height:70px;background:#7fa6d6"><div class="bc" style="background:#6cc3ff"></div>pathly</div>
+  <div class="b" style="left:184px;height:58px;background:#8fb58a"><div class="bc" style="background:#6cc3ff"></div>repo-mgr</div>
+  <div class="b" style="left:252px;height:64px;background:#ae92c4"><div class="bc" style="background:#7ee081"></div>ai-shell</div>
+  <div class="b" style="left:320px;height:60px;background:#d6b24f">..</div>
+  <div class="tag" style="right:6px;top:40px;background:#ffc857;color:#0d1128">2 need you &gt;</div>
+  <div class="tag" style="left:6px;top:40px">&lt; 3 working</div>
+  <div class="mini"><i style="left:10%;background:#6cc3ff"></i><i style="left:14%;background:#6cc3ff"></i><i style="left:30%;background:#ffc857"></i><i style="left:34%;background:#6cc3ff"></i><i style="left:52%;background:#7ee081"></i><i style="left:80%;background:#ffc857"></i><i style="left:86%;background:#ffc857"></i><i style="left:30%;width:25%;top:0;height:10px;border:1px solid #fff;background:none"></i></div>
+</div></div>
+<div class="card-body"><h3>B. One long scrolling street</h3>
+<p>All 30 repos are full-size buildings on one street. You pan left and right (drag, wheel, arrow keys). A minimap strip at the bottom shows every repo's state, and edge arrows say "2 need you →". Click a minimap dot to jump there.</p></div>
+</div>
+
+<div class="card" data-choice="c" onclick="toggleSelect(this)">
+<div class="card-image"><div class="sky">
+  <div class="hill"></div><div class="grass"></div><div class="road"></div>
+  <div class="dist" style="left:8px;width:105px">work<br>
+    <div class="b" style="left:6px;height:44px;width:40px;bottom:46px;font-size:8px"><div class="bc" style="background:#ffc857"></div>kodex</div>
+    <div class="b" style="left:52px;height:50px;width:40px;bottom:46px;background:#7fa6d6;font-size:8px"><div class="bc" style="background:#6cc3ff"></div>pathly</div></div>
+  <div class="dist" style="left:122px;width:105px">tools<br>
+    <div class="b" style="left:6px;height:46px;width:40px;bottom:46px;background:#8fb58a;font-size:8px"><div class="bc" style="background:#6cc3ff"></div>repo-mgr</div>
+    <div class="tag" style="left:52px;bottom:52px">+6</div></div>
+  <div class="dist" style="left:236px;width:110px">personal<br>
+    <div class="b" style="left:6px;height:42px;width:40px;bottom:46px;background:#ae92c4;font-size:8px"><div class="bc" style="background:#7ee081"></div>ai-shell</div>
+    <div class="tag" style="left:52px;bottom:52px">+11</div></div>
+</div></div>
+<div class="card-body"><h3>C. Districts by tag</h3>
+<p>Town is split into neighborhoods using RepoManager's project tags or groups. Each district shows its session repos up front and "+N" for the rest. Click a district to zoom in and see all its buildings.</p></div>
+</div>
+
+</div>

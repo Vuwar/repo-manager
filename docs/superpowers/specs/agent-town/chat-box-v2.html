@@ -1,0 +1,70 @@
+<style>
+.scene{position:relative;width:100%;height:460px;background:linear-gradient(#3a3478,#f07b5a 70%);border-radius:4px;overflow:hidden;font-family:'Courier New',monospace}
+.hill{position:absolute;left:0;right:0;bottom:190px;height:70px;background:#4e8068}
+.grass{position:absolute;left:0;right:0;bottom:160px;height:30px;background:#5ea24f}
+.road{position:absolute;left:0;right:0;bottom:0;height:160px;background:#c9a870}
+.bld{position:absolute;bottom:190px;width:110px;height:120px;background:#d98b6a;border:3px solid #6e2d24;color:#fff;font-size:12px;text-align:center;padding-top:6px}
+.bcn{width:12px;height:12px;border-radius:50%;margin:0 auto 6px;background:#ffc857;box-shadow:0 0 10px #ffc857}
+.wk{position:absolute;bottom:176px;width:10px;height:22px;background:#3f6fb5;border-top:6px solid #ff6b5e}
+.dim{position:absolute;inset:0;background:rgba(9,14,44,.35)}
+.box{position:absolute;left:18px;right:18px;bottom:26px;min-height:150px;display:flex;gap:12px}
+.por{width:120px;flex:none;background:#151a38;border:4px solid #f2ead4;box-shadow:0 0 0 4px #151a38;display:grid;place-items:center;position:relative}
+.face{width:64px;height:64px;position:relative}
+.face .hat{position:absolute;left:4px;right:4px;top:0;height:14px;background:var(--hat)}
+.face .hat2{position:absolute;left:14px;right:14px;top:-8px;height:10px;background:var(--hat)}
+.face .skin{position:absolute;left:12px;right:12px;top:14px;height:30px;background:#f1c8a0}
+.face .e1,.face .e2{position:absolute;top:24px;width:6px;height:6px;background:#1b1f3a}
+.face .e1{left:22px}.face .e2{right:22px}
+.face .mouth{position:absolute;left:28px;top:36px;width:8px;height:3px;background:#b0604a}
+.face .shirt{position:absolute;left:6px;right:6px;top:44px;height:20px;background:var(--shirt)}
+.por .mood{position:absolute;top:6px;right:6px;background:#fff6dc;border:2px solid #2a2f55;color:#d9402f;font-weight:bold;font-size:12px;padding:0 4px}
+.txt{flex:1;background:#151a38;border:4px solid #f2ead4;box-shadow:0 0 0 4px #151a38;color:#f2ead4;padding:20px 18px 12px;font-size:13px;line-height:1.5;position:relative}
+.name{position:absolute;top:-16px;left:14px;background:#ffc857;color:#151a38;font-weight:bold;font-size:13px;padding:2px 10px;border:3px solid #f2ead4}
+.tmr{position:absolute;top:-14px;right:14px;background:#151a38;color:#98a1cf;font-size:11px;padding:1px 8px;border:2px solid #2d3668}
+.tw{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;animation:type 2.6s steps(48,end) 1 both}
+@keyframes type{from{width:0}to{width:30ch}}
+.adv{position:absolute;right:14px;bottom:8px;animation:bl 1s steps(2,end) infinite;color:#ffc857}
+@keyframes bl{50%{opacity:0}}
+.menu{position:absolute;right:18px;bottom:178px;background:#151a38;border:4px solid #f2ead4;box-shadow:0 0 0 4px #151a38;color:#f2ead4;font-size:14px;padding:8px 14px 8px 10px;line-height:1.8}
+.menu .cur{color:#ffc857}
+.inp{margin-top:6px;border-bottom:2px dashed #98a1cf;color:#f2ead4}
+.inp .c{animation:bl 1s steps(2,end) infinite}
+.hint{position:absolute;left:18px;bottom:6px;color:#98a1cf;font-size:11px}
+</style>
+
+<h2>Chat box v2: game dialogue</h2>
+<p class="subtitle">Worker's portrait on the left, name tag on the frame, text types out letter by letter, ▼ to advance. Choices pop up as a small menu. The worker talks in first person.</p>
+
+<div class="split">
+<div class="mockup"><div class="mockup-header">Permission prompt: choice menu</div><div class="mockup-body" style="padding:0">
+<div class="scene">
+  <div class="hill"></div><div class="grass"></div><div class="road"></div>
+  <div class="bld" style="left:30px"><div class="bcn"></div>kodex</div>
+  <div class="wk" style="left:80px"></div>
+  <div class="dim"></div>
+  <div class="menu"><div class="cur">▶ Go ahead</div><div>&nbsp;&nbsp;Always OK</div><div>&nbsp;&nbsp;No, don't</div></div>
+  <div class="box">
+    <div class="por" style="--hat:#ff6b5e;--shirt:#3f6fb5"><div class="face"><div class="hat2"></div><div class="hat"></div><div class="skin"></div><div class="e1"></div><div class="e2"></div><div class="mouth"></div><div class="shirt"></div></div><span class="mood">!</span></div>
+    <div class="txt"><span class="name">KODEX · Session A</span><span class="tmr">⏳ 4:12</span>
+      Boss! I need to run a command first:<br><span class="tw">npm install --save-dev vitest</span><br>Can I?
+    </div>
+  </div>
+  <div class="hint">↑↓ choose · Enter confirm · Esc walk away</div>
+</div></div></div>
+
+<div class="mockup"><div class="mockup-header">Finished turn: worker reports, you reply</div><div class="mockup-body" style="padding:0">
+<div class="scene">
+  <div class="hill"></div><div class="grass"></div><div class="road"></div>
+  <div class="bld" style="left:30px;background:#ae92c4;border-color:#432e5a"><div class="bcn" style="background:#7ee081;box-shadow:0 0 10px #7ee081"></div>ai-shell</div>
+  <div class="wk" style="left:80px;border-top-color:#7ee081"></div>
+  <div class="dim"></div>
+  <div class="box">
+    <div class="por" style="--hat:#7ee081;--shirt:#8a5fb0"><div class="face"><div class="hat2"></div><div class="hat"></div><div class="skin"></div><div class="e1"></div><div class="e2"></div><div class="mouth" style="width:14px;left:25px"></div><div class="shirt"></div></div><span class="mood" style="color:#2f9e44">✓</span></div>
+    <div class="txt"><span class="name" style="background:#7ee081">AI-SHELL · Session A</span><span class="tmr">⏳ 2:40</span>
+      All done! 42 tests pass. Also, the config loader ignores env overrides. Want me to fix that too?
+      <div class="inp">&gt; Yes, fix it and add a test<span class="c">_</span></div>
+    </div>
+  </div>
+  <div class="hint">Enter send · Esc let it finish · Shift+Enter new line · ▼ read full reply</div>
+</div></div></div>
+</div>
