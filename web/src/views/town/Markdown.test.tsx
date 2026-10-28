@@ -40,6 +40,16 @@ describe('Markdown', () => {
     expect(c.querySelector('[title="https://example.com"]')?.textContent).toBe('the docs');
   });
 
+  it('makes links to other sessions clickable', () => {
+    const seen: string[] = [];
+    const c = render(<Markdown text="Ask [AI chatbox](#local_4bbbecd2-8f88) or [docs](https://x.y)" onSessionLink={(id) => seen.push(id)} />).container;
+    const buttons = c.querySelectorAll('button.md-session');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toBe('AI chatbox');
+    (buttons[0] as HTMLButtonElement).click();
+    expect(seen).toEqual(['local_4bbbecd2-8f88']);
+  });
+
   it('leaves an unclosed marker as plain text (half-typed text)', () => {
     const c = html('Fixed **the b');
     expect(c.querySelector('strong')).toBeNull();

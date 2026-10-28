@@ -91,6 +91,7 @@ export const api = {
   townAnswer: (requestId: string, behavior: 'allow' | 'deny', always: boolean) =>
     action('/api/town/permission/answer', { requestId, behavior, always }),
   townOpen: (sessionId: string) => action('/api/town/open', { sessionId }),
+  townOpenHost: (hostSessionId: string) => action('/api/town/open-host', { hostSessionId }),
   projects: (git = true, signal?: AbortSignal) =>
     request<ProjectDto[]>('GET', '/api/projects' + qs({ git: git ? undefined : false }), undefined, signal),
 

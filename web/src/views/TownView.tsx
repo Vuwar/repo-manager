@@ -118,6 +118,12 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     setQuestsOpen(false);
     setOpen(id);
   };
+  /** A reply linked another desktop session: talk to it here when it is in town, else open it in Claude. */
+  const openLinkedSession = (hostSessionId: string) => {
+    const target = Object.values(agents).find((a) => a.hostSessionId === hostSessionId);
+    if (target) talkTo(target.id);
+    else void api.townOpenHost(hostSessionId);
+  };
   /** Next worker that needs the user, in street order, after the open one. */
   const nextWaiting = (): boolean => {
     const waiting = lots.flatMap((l) => l.workers).filter((w) => w.state === 'waiting');
@@ -296,6 +302,7 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
           lotName={openLot.name}
           index={openLot.workers.findIndex((w) => w.id === openSession.id)}
           onClose={() => setOpen(null)}
+          onSessionLink={openLinkedSession}
           draft={drafts[openSession.id] ?? ''}
           onDraft={(text) => setDrafts((d) => ({ ...d, [openSession.id]: text }))}
         />

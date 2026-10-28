@@ -1,4 +1,4 @@
-import type { AgentSessionDto, PermissionPromptDto } from '../../api/types';
+import type { AgentSessionDto, PermissionPromptDto, WrapUpDto } from '../../api/types';
 
 export type DialogueKind = 'permission' | 'answerInWindow' | 'question' | 'done' | 'working' | 'idle' | 'failed';
 
@@ -13,6 +13,8 @@ export interface Dialogue {
   prompt?: PermissionPromptDto;
   /** The box shows the ">" message line. */
   canSend: boolean;
+  /** A question the session left with suggested replies. */
+  wrapUp?: WrapUpDto;
 }
 
 /** The worker asks for permission in its own words. */
@@ -35,7 +37,7 @@ export function sessionLetter(index: number): string {
 }
 
 export function dialogueFor(session: AgentSessionDto, lotName: string, indexInLot: number, log: string[]): Dialogue {
-  const nameTag = `${lotName.toUpperCase()} · Session ${sessionLetter(indexInLot)}`;
+  const nameTag = `${lotName.toUpperCase()} · ${session.title ?? 'Session ' + sessionLetter(indexInLot)}`;
   const answerable = session.prompts.find((p) => p.answerable);
   const released = session.prompts.find((p) => !p.answerable);
   let kind: DialogueKind;
@@ -51,7 +53,7 @@ export function dialogueFor(session: AgentSessionDto, lotName: string, indexInLo
     text = session.message;
   } else if (session.state === 'done') {
     kind = 'done';
-    text = session.lastReply ?? session.message;
+    text = session.lastTurn ?? session.lastReply ?? session.message;
   } else if (session.state === 'working') {
     kind = 'working';
     text = [`Working on: ${session.prompt ?? session.message}`, log.length ? '\n' + log.join('\n') : ''].join('\n').trimEnd();
@@ -64,5 +66,5 @@ export function dialogueFor(session: AgentSessionDto, lotName: string, indexInLo
   }
   const mood = kind === 'permission' || kind === 'answerInWindow' || kind === 'question' ? '!' : kind === 'done' ? '✓' : null;
   const canSend = session.canSend && (kind === 'done' || kind === 'working' || kind === 'idle' || kind === 'failed');
-  return { kind, nameTag, mood, text, prompt: answerable, canSend };
+  return { kind, nameTag, mood, text, prompt: answerable, canSend, wrapUp: session.wrapUp };
 }

@@ -200,6 +200,13 @@ public class TownApiTests(DaemonFixture f)
         await PostHook(HookJson("SessionEnd", id));
     }
 
+    [Theory]
+    [InlineData("not-a-host-id")]
+    [InlineData("local_a&x=1")]
+    [InlineData("")]
+    public async Task OpenHost_RejectsAnythingButADesktopSessionId(string host) =>
+        Assert.False((await f.Post("api/town/open-host", new TownOpenHostRequest(host))).Ok);
+
     [Fact]
     public async Task Open_UnknownSession_Fails() =>
         Assert.False((await f.Post("api/town/open", new TownOpenRequest(NewId()))).Ok);

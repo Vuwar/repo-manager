@@ -32,12 +32,14 @@ interface Props {
   lotName: string;
   index: number;
   onClose: () => void;
+  /** A link to another desktop session in the text was clicked. */
+  onSessionLink?: (hostSessionId: string) => void;
   /** The typed message, kept by the town so it survives the box closing (quest log, Esc). */
   draft?: string;
   onDraft?: (text: string) => void;
 }
 
-export function DialogueBox({ session, lotName, index, onClose, draft: keptDraft, onDraft }: Props) {
+export function DialogueBox({ session, lotName, index, onClose, onSessionLink, draft: keptDraft, onDraft }: Props) {
   const log = useAppState((s) => s.agentLog[session.id] ?? NO_LOG);
   const d = dialogueFor(session, lotName, index, log);
   const now = useNow();
@@ -87,15 +89,16 @@ export function DialogueBox({ session, lotName, index, onClose, draft: keptDraft
   const [sending, setSending] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  const send = async () => {
-    const text = draft.trim();
+  /** Sends the typed message, or a wrap-up reply's message (which leaves the typed draft alone). */
+  const send = async (reply?: string) => {
+    const text = (reply ?? draft).trim();
     if (!text || sending) return;
     setSending(true);
     const r = await api.townSend(session.id, text);
     setSending(false);
     // Keep typing in the box: follow-up keys must not reach the town.
     input.current?.focus();
-    if (r.ok) setDraft('');
+    if (r.ok && reply === undefined) setDraft('');
     setStatus(r.ok ? { ok: true, text: 'Sent.' } : { ok: false, text: r.error ?? 'Could not send.' });
   };
   const [openError, setOpenError] = useState<string | null>(null);
@@ -151,8 +154,23 @@ export function DialogueBox({ session, lotName, index, onClose, draft: keptDraft
         </span>
         <span className="dlg-wait">⏳ {waitText(now - Date.parse(session.since))}</span>
         <div className="dlg-text">
-          <Markdown text={d.text.slice(0, shown)} />
+          <Markdown text={d.text.slice(0, shown)} onSessionLink={onSessionLink} />
         </div>
+        {d.wrapUp && (
+          <div className="dlg-wrapup">
+            {d.wrapUp.recap && <div className="dlg-recap">{d.wrapUp.recap}</div>}
+            {d.wrapUp.ask && <div className="dlg-ask">{d.wrapUp.ask}</div>}
+            {d.canSend && d.wrapUp.actions.length > 0 && (
+              <div className="dlg-replies">
+                {d.wrapUp.actions.map((a) => (
+                  <button key={a.label} type="button" title={a.message} disabled={sending} onClick={(e) => (e.stopPropagation(), void send(a.message))}>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {done && <span className="dlg-more">▼</span>}
         {answered && <div className="dlg-note">{answered}</div>}
         {d.canSend && (

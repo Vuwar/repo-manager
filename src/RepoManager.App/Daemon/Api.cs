@@ -323,6 +323,11 @@ public static class Api
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
 
+        api.MapPost("/town/open-host", (TownOpenHostRequest req) =>
+            WindowActivator.DesktopLink(req.HostSessionId) is { } link && WindowActivator.OpenLink(link)
+                ? ActionResultDto.Success("opened in Claude")
+                : ActionResultDto.Fail("not a Claude desktop session"));
+
         api.MapPost("/town/focus", (TownFocusRequest req) =>
         {
             d.Permissions.SetFocused(req.Focused);

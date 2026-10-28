@@ -158,6 +158,15 @@ describe('DialogueBox', () => {
     expect(api.townOpen).toHaveBeenCalledWith('a');
   });
 
+  it('shows the wrap-up question; a reply button sends its message', async () => {
+    const wrapUp = { recap: '14.sql is applied.', ask: 'Commit the changes?', actions: [{ label: 'Commit', message: 'Commit the sales query speedups' }, { label: 'Not yet', message: 'Not yet' }] };
+    show(agent('a', { state: 'done', canSend: true, wrapUp }));
+    expect(screen.getByText('Commit the changes?')).toBeTruthy();
+    expect(screen.getByText('14.sql is applied.')).toBeTruthy();
+    await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Commit' })));
+    expect(api.townSend).toHaveBeenCalledWith('a', 'Commit the sales query speedups');
+  });
+
   it('no message line without an inbox', () => {
     show(agent('a', { state: 'done', canSend: false }));
     expect(screen.queryByRole('textbox')).toBeNull();

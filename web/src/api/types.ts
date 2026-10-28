@@ -199,6 +199,18 @@ export interface AgentSessionDto {
   touched: string;
   canSend: boolean;
   prompts: PermissionPromptDto[];
+  /** The session's title (the desktop app's name for it), else its first prompt shortened. */
+  title?: string;
+  /** Every assistant message of the last turn, separated by blank lines. */
+  lastTurn?: string;
+  /** A question the session left with suggested replies (the desktop app's wrap-up card). */
+  wrapUp?: WrapUpDto;
+}
+
+export interface WrapUpDto {
+  recap?: string;
+  ask?: string;
+  actions: { label: string; message: string }[];
 }
 
 export type EventDto =

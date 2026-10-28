@@ -9,6 +9,7 @@ const api = {
   townSend: vi.fn(() => Promise.resolve(ok)),
   townAnswer: vi.fn(() => Promise.resolve(ok)),
   townOpen: vi.fn(() => Promise.resolve(ok)),
+  townOpenHost: vi.fn(() => Promise.resolve(ok)),
 };
 vi.mock('../api/client', () => ({ api }));
 const { workerSpot } = await import('../lib/town/render');
@@ -255,6 +256,23 @@ describe('TownView', () => {
       fireEvent.keyDown(window, { key: 'q' });
       fireEvent.keyDown(window, { key: 'Escape' });
       expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('half typed');
+    });
+
+    it('a link to another session opens its box, or the session in Claude when it is not in town', () => {
+      setup(undefined, [
+        agent('s1', { project: 'alpha', state: 'done', lastTurn: 'Told [Chat work](#local_bbb) and [Gone](#local_zzz).' }),
+        agent('s2', { project: 'beta', state: 'working', hostSessionId: 'local_bbb', title: 'Chat work' }),
+      ]);
+      // beta (working) sorts before alpha (done): alpha is lot 1.
+      clickWorker(1, 0, 'done');
+      fireEvent.keyDown(window, { key: ' ' });
+      fireEvent.click(screen.getByRole('button', { name: 'Chat work' }));
+      expect(dialog()?.getAttribute('aria-label')).toBe('BETA · Chat work');
+      fireEvent.keyDown(window, { key: 'Escape' });
+      clickWorker(1, 0, 'done');
+      fireEvent.keyDown(window, { key: ' ' });
+      fireEvent.click(screen.getByRole('button', { name: 'Gone' }));
+      expect(api.townOpenHost).toHaveBeenCalledWith('local_zzz');
     });
 
     it('reports focus while mounted', async () => {

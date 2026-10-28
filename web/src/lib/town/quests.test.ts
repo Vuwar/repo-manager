@@ -38,6 +38,13 @@ describe('questsFor', () => {
   });
 });
 
+describe('wrap-up questions', () => {
+  it('a done session with a question shows the question as its quest', () => {
+    const d = agent('d1', { state: 'done', wrapUp: { ask: 'Commit the changes?', actions: [] } });
+    expect(questsFor([lot('panel-pro', [d])], {})[0].title).toBe('panel-pro: Commit the changes?');
+  });
+});
+
 describe('waitText', () => {
   it('rounds to minutes and hours', () => {
     expect(waitText(59_000)).toBe('just now');

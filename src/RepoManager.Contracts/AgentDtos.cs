@@ -74,3 +74,6 @@ public sealed record PermissionAnswerRequest(string RequestId, string Behavior, 
 public sealed record TownFocusRequest(bool Focused);
 
 public sealed record TownOpenRequest(string SessionId);
+
+/// <summary>A desktop session by its CLAUDE_CODE_HOST_SESSION_ID (local_...), e.g. one linked from a reply.</summary>
+public sealed record TownOpenHostRequest(string HostSessionId);

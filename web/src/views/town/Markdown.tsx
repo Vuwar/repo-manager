@@ -7,7 +7,12 @@ import type { ReactNode } from 'react';
 const INLINE =
   /`([^`\n]+)`|\*\*(.+?)\*\*|__(.+?)__|\*([^*\s](?:[^*\n]*?[^*\s])?)\*|(?<![A-Za-z0-9])_([^_\s](?:[^_\n]*?[^_\s])?)_(?![A-Za-z0-9])|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
 
-function inline(text: string, key = 'i'): ReactNode[] {
+/** A link to another desktop session (the desktop app writes them as [title](#local_...)). */
+const SESSION_LINK = /^#(local_[A-Za-z0-9-]{1,64})$/;
+
+type OnSessionLink = ((hostSessionId: string) => void) | undefined;
+
+function inline(text: string, key = 'i', onSession?: OnSessionLink): ReactNode[] {
   const out: ReactNode[] = [];
   let at = 0;
   let n = 0;
@@ -16,9 +21,16 @@ function inline(text: string, key = 'i'): ReactNode[] {
     const k = `${key}-${n++}`;
     const [, code, bold1, bold2, em1, em2, linkText, url] = m;
     if (code !== undefined) out.push(<code key={k}>{code}</code>);
-    else if (bold1 !== undefined || bold2 !== undefined) out.push(<strong key={k}>{inline(bold1 ?? bold2, k)}</strong>);
-    else if (em1 !== undefined || em2 !== undefined) out.push(<em key={k}>{inline(em1 ?? em2, k)}</em>);
-    else
+    else if (bold1 !== undefined || bold2 !== undefined) out.push(<strong key={k}>{inline(bold1 ?? bold2, k, onSession)}</strong>);
+    else if (em1 !== undefined || em2 !== undefined) out.push(<em key={k}>{inline(em1 ?? em2, k, onSession)}</em>);
+    else if (onSession && SESSION_LINK.test(url)) {
+      const host = SESSION_LINK.exec(url)![1];
+      out.push(
+        <button key={k} type="button" className="md-link md-session" title="Talk to this session" onClick={(e) => (e.stopPropagation(), onSession(host))}>
+          {linkText}
+        </button>,
+      );
+    } else
       out.push(
         <span key={k} className="md-link" title={url}>
           {inline(linkText, k)}
@@ -35,12 +47,13 @@ const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const FENCE = /^\s*```/;
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, onSessionLink }: { text: string; onSessionLink?: (hostSessionId: string) => void }) {
+  const inline_ = (t: string, key: string) => inline(t, key, onSessionLink);
   const lines = text.split('\n');
   const blocks: ReactNode[] = [];
   let para: string[] = [];
   const flush = () => {
-    if (para.length) blocks.push(<p key={blocks.length}>{inline(para.join('\n'), 'p' + blocks.length)}</p>);
+    if (para.length) blocks.push(<p key={blocks.length}>{inline_(para.join('\n'), 'p' + blocks.length)}</p>);
     para = [];
   };
   for (let i = 0; i < lines.length; i++) {
@@ -58,7 +71,7 @@ export function Markdown({ text }: { text: string }) {
       flush();
       blocks.push(
         <div key={blocks.length} className={`md-h md-h${h[1].length}`}>
-          {inline(h[2], 'h' + blocks.length)}
+          {inline_(h[2], 'h' + blocks.length)}
         </div>,
       );
     } else if (listRe) {
@@ -66,7 +79,7 @@ export function Markdown({ text }: { text: string }) {
       const items: string[] = [];
       for (; i < lines.length && listRe.test(lines[i]); i++) items.push(listRe.exec(lines[i])![1]);
       i--;
-      const lis = items.map((t, k) => <li key={k}>{inline(t, `l${blocks.length}-${k}`)}</li>);
+      const lis = items.map((t, k) => <li key={k}>{inline_(t, `l${blocks.length}-${k}`)}</li>);
       blocks.push(listRe === BULLET ? <ul key={blocks.length}>{lis}</ul> : <ol key={blocks.length}>{lis}</ol>);
     } else if (!line.trim()) flush();
     else para.push(line);

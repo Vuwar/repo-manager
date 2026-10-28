@@ -22,7 +22,13 @@ export function questsFor(lots: Lot[], seen: Record<string, string>): Quest[] {
       const since = Date.parse(w.since);
       if (w.state === 'waiting') needs.push({ sessionId: w.id, lotName: lot.name, kind: 'needsYou', title: `${lot.name}: ${w.message}`, since });
       else if (w.state === 'done' && seen[w.id] !== w.since)
-        review.push({ sessionId: w.id, lotName: lot.name, kind: 'review', title: `Review ${lot.name}'s result`, since });
+        review.push({
+          sessionId: w.id,
+          lotName: lot.name,
+          kind: 'review',
+          title: w.wrapUp?.ask ? `${lot.name}: ${w.wrapUp.ask}` : `Review ${lot.name}'s result`,
+          since,
+        });
     }
   const bySince = (a: Quest, b: Quest) => a.since - b.since;
   return [...needs.sort(bySince), ...review.sort(bySince)];

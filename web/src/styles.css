@@ -3683,3 +3683,42 @@ details.advanced[open] {
 .dlg-text .md-link {
   text-decoration: underline dotted;
 }
+
+.dlg-wrapup {
+  padding: 6px 8px;
+  border: 2px dashed #2d3668;
+}
+.dlg-recap {
+  color: #98a1cf;
+}
+.dlg-ask {
+  font-weight: bold;
+  color: #ffc857;
+}
+.dlg-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.dlg-replies button {
+  font: inherit;
+  color: #151a38;
+  background: #f2ead4;
+  border: 2px solid #f2ead4;
+  padding: 1px 10px;
+  cursor: pointer;
+}
+.dlg-replies button:first-child {
+  background: #ffc857;
+  border-color: #ffc857;
+}
+.dlg-text .md-session {
+  font: inherit;
+  color: #ffc857;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
