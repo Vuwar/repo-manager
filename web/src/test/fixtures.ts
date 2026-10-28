@@ -73,7 +73,7 @@ export function agent(id: string, over: Partial<AgentSessionDto> = {}): AgentSes
   return {
     id,
     folder: 'demo',
-    cwd: 'C:\r\demo',
+    cwd: 'C:\\r\\demo',
     state: 'idle',
     message: '',
     surface: 'desktop',
