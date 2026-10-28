@@ -45,9 +45,10 @@ interface Props {
   onAddProject: () => void;
   onNavigate: () => void;
   onSimpleView: () => void;
+  onTown?: () => void;
 }
 
-export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ onAddProject, onNavigate, onSimpleView }, filterRef) {
+export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ onAddProject, onNavigate, onSimpleView, onTown }, filterRef) {
   const projects = useAppState((s) => s.projects);
   const view = useAppState((s) => s.view);
   const pending = useAppState((s) => s.pending);
@@ -123,6 +124,7 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
         </div>
         <div className="side-actions">
           <Button size="sm" variant="ghost" icon="simple" title="Simple view: find and start services" aria-label="Simple view" onClick={onSimpleView} />
+          {onTown && <Button size="sm" variant="ghost" icon="town" title="Agent Town: every Claude session at a glance" aria-label="Town" onClick={onTown} />}
           <Button size="sm" variant="ghost" icon="plus" title="Add project" aria-label="Add project" onClick={onAddProject} />
           <Button
             size="sm"

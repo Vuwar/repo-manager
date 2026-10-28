@@ -1,0 +1,127 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { agent, instance, project, svc } from '../test/fixtures';
+
+vi.mock('../state/actions', () => ({ loadProjects: vi.fn(), dismissToast: vi.fn() }));
+
+const { TownView } = await import('./TownView');
+const { dispatch } = await import('../state/store');
+
+const p = (name: string) => project(name, [instance(name, [svc(name, 'web')])]);
+
+/** Lot names in street order, as the minimap lists them. */
+const order = () => screen.getAllByRole('button', { name: /^Go to / }).map((b) => b.getAttribute('aria-label')!.slice(6));
+/** Names of the lots whose labels are on screen. */
+const labels = () => [...document.querySelectorAll('.town-lot-name')].map((e) => e.textContent);
+
+function setup(projects = [p('alpha'), p('beta'), p('gamma')], agents = [] as ReturnType<typeof agent>[]) {
+  dispatch({ type: 'projectsLoaded', projects });
+  dispatch({ type: 'agentsLoaded', agents });
+  const onLeave = vi.fn();
+  render(<TownView onLeave={onLeave} />);
+  return { onLeave, stage: document.querySelector('.town-stage') as HTMLElement };
+}
+
+describe('TownView', () => {
+  beforeEach(() => {
+    // 960 x 540 CSS px: zoom 3, so 320 logical px are visible (about 6 lots).
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(960);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(540);
+    const ctx = new Proxy({}, { get: () => () => {}, set: () => true });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('shows a label per lot in urgency order', () => {
+    setup(undefined, [agent('1', { project: 'gamma', state: 'waiting' }), agent('2', { project: 'alpha', state: 'working' })]);
+    expect(labels()).toEqual(['gamma', 'alpha', 'beta']);
+  });
+
+  it('marks temporary lots', () => {
+    setup([], [agent('1', { folder: 'tool', cwd: 'C:\\x\\tool', state: 'working' })]);
+    expect(screen.getByText('not in RepoManager')).toBeTruthy();
+    expect(labels()).toEqual(['tool']);
+  });
+
+  it('shows a worktree sign', () => {
+    setup(undefined, [agent('1', { project: 'alpha', worktree: 'feat-x', state: 'working' })]);
+    expect(screen.getByText('feat-x')).toBeTruthy();
+  });
+
+  it('shows +N past five workers', () => {
+    const many = Array.from({ length: 7 }, (_, i) => agent('w' + i, { project: 'alpha', state: 'working' }));
+    setup(undefined, many);
+    expect(screen.getByText('+2')).toBeTruthy();
+  });
+
+  it('names off-screen sessions in an edge arrow that jumps there', () => {
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    // Seven waiting lots fill the view; the working one sorts eighth, off the right edge.
+    const waiting = Array.from({ length: 7 }, (_, i) => agent('w' + i, { project: 'p' + String(i + 10), state: 'waiting' }));
+    setup(projects, [...waiting, agent('x', { project: 'p39', state: 'working' })]);
+    expect(labels()).not.toContain('p39');
+    fireEvent.click(screen.getByRole('button', { name: '1 working →' }));
+    expect(labels()).toContain('p39');
+    // Now the waiting lots are off the left edge.
+    expect(screen.getByRole('button', { name: /^← \d need you$/ })).toBeTruthy();
+  });
+
+  it('has one minimap dot per lot; clicking one jumps there', () => {
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    setup(projects);
+    expect(order()).toHaveLength(40);
+    expect(labels()).not.toContain('p30');
+    fireEvent.click(screen.getByRole('button', { name: 'Go to p30' }));
+    expect(labels()).toContain('p30');
+  });
+
+  it('holds the order while hovered and re-sorts 3 s after leaving', () => {
+    vi.useFakeTimers();
+    const { stage } = setup();
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+    fireEvent.pointerEnter(stage);
+    act(() => dispatch({ type: 'agent', agent: agent('1', { project: 'gamma', state: 'waiting' }) }));
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+    fireEvent.pointerLeave(stage);
+    act(() => vi.advanceTimersByTime(2999));
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+    act(() => vi.advanceTimersByTime(1));
+    expect(order()).toEqual(['gamma', 'alpha', 'beta']);
+  });
+
+  it('re-sorts at once on Home and returns to the left end', () => {
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    const { stage } = setup(projects);
+    fireEvent.pointerEnter(stage);
+    act(() => dispatch({ type: 'agent', agent: agent('1', { project: 'p39', state: 'waiting' }) }));
+    expect(order()[0]).toBe('p00');
+    fireEvent.click(screen.getByRole('button', { name: 'Go to p20' }));
+    expect(labels()).not.toContain('p00');
+    fireEvent.keyDown(window, { key: 'Home' });
+    expect(order()[0]).toBe('p39');
+    expect(labels()[0]).toBe('p39');
+  });
+
+  it('pans with the arrow keys', () => {
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    setup(projects);
+    expect(labels()).toContain('p00');
+    for (let i = 0; i < 4; i++) fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(labels()).not.toContain('p00');
+  });
+
+  it('shows an empty state with no projects and no sessions', () => {
+    setup([], []);
+    expect(screen.getByText(/No projects yet/)).toBeTruthy();
+  });
+
+  it('Leave town calls onLeave', () => {
+    const { onLeave } = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave town' }));
+    expect(onLeave).toHaveBeenCalled();
+  });
+});

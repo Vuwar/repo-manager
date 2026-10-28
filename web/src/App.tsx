@@ -20,6 +20,7 @@ import { PortsView } from './views/PortsView';
 import { NoInstance, ProjectView } from './views/ProjectView';
 import { MiniView } from './views/MiniView';
 import { SimpleView } from './views/SimpleView';
+import { TownView } from './views/TownView';
 
 export function App() {
   const [token] = useState(initToken);
@@ -46,6 +47,12 @@ function Shell({ token }: { token: string }) {
   const setMode = (m: UiMode) => {
     saveMode(m);
     setModeState(m);
+  };
+  // "Leave town" returns to the mode the town was entered from (simple when the app opened in the town).
+  const beforeTown = useRef<UiMode>('simple');
+  const enterTown = () => {
+    if (mode !== 'town') beforeTown.current = mode;
+    setMode('town');
   };
   // The desktop shell shrinks the window for the compact view and restores it after.
   useEffect(() => postMode(mode), [mode]);
@@ -152,8 +159,9 @@ function Shell({ token }: { token: string }) {
     };
   }, [current]);
 
+  if (mode === 'town') return <TownView onLeave={() => setMode(beforeTown.current)} />;
   if (mode === 'mini') return <MiniView onExpand={() => setMode('simple')} />;
-  if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} onCompact={() => setMode('mini')} />;
+  if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} onCompact={() => setMode('mini')} onTown={enterTown} />;
 
   let main;
   if (view.kind === 'ports') main = <PortsView />;
@@ -163,7 +171,7 @@ function Shell({ token }: { token: string }) {
 
   return (
     <div className={`app${drawer ? ' drawer-open' : ''}`}>
-      <Sidebar ref={filterRef} onAddProject={() => setAddOpen(true)} onNavigate={() => setDrawer(false)} onSimpleView={() => setMode('simple')} />
+      <Sidebar ref={filterRef} onAddProject={() => setAddOpen(true)} onNavigate={() => setDrawer(false)} onSimpleView={() => setMode('simple')} onTown={enterTown} />
       <div className="drawer-scrim" onClick={() => setDrawer(false)} />
       <main className="main">
         <div className="topbar">

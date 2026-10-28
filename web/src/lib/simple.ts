@@ -3,7 +3,7 @@ import { filterInstances } from './groups';
 import { isAmbientMode, type AmbientMode } from './ambient';
 import { isActive, stateTone, type StateTone } from './format';
 
-export type UiMode = 'simple' | 'full' | 'mini';
+export type UiMode = 'simple' | 'full' | 'mini' | 'town';
 
 const MODE_KEY = 'repomanager.mode';
 const TABS_KEY = 'repomanager.simple.tabs';
@@ -30,7 +30,7 @@ function write(key: string, value: unknown): void {
 
 export const readMode = (): UiMode => {
   const m = read<string>(MODE_KEY, 'full');
-  return m === 'simple' || m === 'mini' ? m : 'full';
+  return m === 'simple' || m === 'mini' || m === 'town' ? m : 'full';
 };
 export const saveMode = (m: UiMode) => write(MODE_KEY, m);
 export const readTabs = (): string[] => {

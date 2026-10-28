@@ -28,6 +28,7 @@ import { useAppState } from '../state/store';
 interface Props {
   onFullView: () => void;
   onCompact?: () => void;
+  onTown?: () => void;
 }
 
 function serviceHref(s: ServiceDto): string | undefined {
@@ -240,7 +241,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
 }
 
-export function SimpleView({ onFullView, onCompact }: Props) {
+export function SimpleView({ onFullView, onCompact, onTown }: Props) {
   const projects = useAppState((s) => s.projects);
   const projectsError = useAppState((s) => s.projectsError);
   const connection = useAppState((s) => s.connection);
@@ -359,6 +360,11 @@ export function SimpleView({ onFullView, onCompact }: Props) {
             <span className="sv-conn" role="status">
               <Spinner size={11} /> {connection === 'reconnecting' ? 'Reconnecting' : 'Connecting'}
             </span>
+          )}
+          {onTown && (
+            <Button variant="ghost" icon="town" onClick={onTown} title="Agent Town: every Claude session at a glance">
+              Town
+            </Button>
           )}
           {onCompact && (
             <Button variant="ghost" icon="compact" onClick={onCompact} title="Small window with just start and stop buttons">

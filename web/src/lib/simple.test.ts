@@ -59,3 +59,12 @@ describe('simple mode helpers', () => {
     expect(miniGroups(ps, ['b'], '').map((g) => g.instance.key)).toEqual(['b']);
   });
 });
+
+describe('mode', () => {
+  it('readMode accepts town', async () => {
+    const { readMode, saveMode } = await import('./simple');
+    saveMode('town');
+    expect(readMode()).toBe('town');
+    localStorage.clear();
+  });
+});

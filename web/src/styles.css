@@ -3259,3 +3259,162 @@ details.advanced[open] {
     animation: none;
   }
 }
+
+/* ---- Agent Town ---- */
+
+.town {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #090e2c;
+  color: #fff;
+  font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  user-select: none;
+}
+.town-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(13, 17, 40, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.town-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.town-counts {
+  flex: 1;
+  color: #cfd6ff;
+}
+.town-leave,
+.town-edge {
+  font: inherit;
+  color: #fff;
+  background: rgba(13, 17, 40, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.town-leave:hover,
+.town-edge:hover {
+  border-color: #fff;
+}
+.town-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.town-stage:active {
+  cursor: grabbing;
+}
+.town-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.town-label {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.town-lot-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 5px;
+  background: rgba(13, 17, 40, 0.8);
+  border-radius: 2px;
+}
+.town-lot-name::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 1px;
+  background: var(--c);
+  vertical-align: 0;
+}
+.town-lot-note {
+  font-size: 9px;
+  color: #cfd6ff;
+  padding: 1px 4px;
+  background: rgba(13, 17, 40, 0.7);
+  border-radius: 2px;
+}
+.town-sign {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 9px;
+  padding: 1px 4px;
+  color: #2a1d10;
+  background: #e8d9b0;
+  border: 1px solid #7a5a3a;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.town-edge {
+  position: absolute;
+  top: 12px;
+  border-color: var(--c);
+}
+.town-edge-left {
+  left: 12px;
+}
+.town-edge-right {
+  right: 12px;
+}
+.town-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #cfd6ff;
+  font-size: 13px;
+  pointer-events: none;
+}
+.town-minimap {
+  position: relative;
+  height: 18px;
+  margin: 4px 12px 8px;
+  background: rgba(13, 17, 40, 0.7);
+  border-radius: 2px;
+}
+.town-minimap-frame {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.town-dot {
+  position: absolute;
+  top: 5px;
+  width: 6px;
+  height: 8px;
+  margin-left: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: var(--c);
+  cursor: pointer;
+}
+.town-dot:hover,
+.town-dot:focus-visible {
+  outline: 1px solid #fff;
+}

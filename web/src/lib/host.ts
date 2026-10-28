@@ -20,6 +20,11 @@ export function postMode(mode: UiMode): void {
   webview()?.postMessage({ type: 'mode', mode });
 }
 
+/** Toggles borderless full screen (town view only; the shell ignores it elsewhere). */
+export function postFullscreen(): void {
+  webview()?.postMessage({ type: 'fullscreen' });
+}
+
 /** Keeps the window above other windows (compact view only). */
 export function postTopmost(on: boolean): void {
   webview()?.postMessage({ type: 'topmost', on });

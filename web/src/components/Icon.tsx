@@ -83,6 +83,14 @@ const PATHS = {
     </>
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  town: (
+    <>
+      <path d="M3 20h18" />
+      <path d="M5 20v-8l4-3.5 4 3.5v8" />
+      <path d="M13 20v-11l3-2.5 3 2.5v11" />
+      <path d="M8 20v-3h2v3" />
+    </>
+  ),
   compact: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
   external: (
     <>
