@@ -1,5 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api/client';
 import { postFullscreen } from '../lib/host';
+import { startFocusReporting } from '../lib/town/focus';
+import { questsFor } from '../lib/town/quests';
+import { useNow } from '../lib/useNow';
+import { DialogueBox } from './town/DialogueBox';
+import { QuestLog } from './town/QuestLog';
 import {
   ARROW_PAN,
   BW,
@@ -16,12 +22,14 @@ import {
   worldWidth,
 } from '../lib/town/camera';
 import { heldOrder, RESORT_DELAY_MS } from '../lib/town/hold';
-import { MAX_WORKERS, NO_SESSION_COLOR, STATE_COLOR, TownScene, workerSpot } from '../lib/town/render';
+import { MAX_WORKERS, NO_SESSION_COLOR, STATE_COLOR, TownScene, workerAt, workerSpot } from '../lib/town/render';
 import { buildStreet, type Lot, type LotGroup } from '../lib/town/street';
 import { useAppState } from '../state/store';
 
 /** Seconds for one full day and night. */
 const DAY_CYCLE_S = 150;
+/** Pointer travel (CSS px) below which a press and release counts as a click, not a drag. */
+const CLICK_SLOP_PX = 4;
 
 const swatch = (g: LotGroup) => (g === 'none' ? NO_SESSION_COLOR : STATE_COLOR[g]);
 
@@ -88,16 +96,49 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     setShown(wanted);
   };
 
-  // Keys: arrows pan, Home re-sorts and goes to the left end, F11 toggles full screen.
-  const keys = useRef({ pan, home });
-  keys.current = { pan, home };
+  // Dialogue and quest log. The town tells the daemon while it has focus, so permission prompts wait for it.
+  const [open, setOpen] = useState<string | null>(null);
+  const [seen, setSeen] = useState<Record<string, string>>({});
+  const [questsOpen, setQuestsOpen] = useState(false);
+  const now = useNow();
+  useEffect(() => startFocusReporting((f) => void api.townFocus(f)), []);
+  const openSession = open ? agents[open] : undefined;
+  const openLot = openSession ? lots.find((l) => l.workers.some((w) => w.id === openSession.id)) : undefined;
+  useEffect(() => {
+    if (open && !openSession) setOpen(null);
+  }, [open, openSession]);
+  // Looking at a finished session takes it off the quest log.
+  useEffect(() => {
+    if (openSession?.state === 'done' && seen[openSession.id] !== openSession.since)
+      setSeen((s) => ({ ...s, [openSession.id]: openSession.since }));
+  }, [openSession, seen]);
+  const talkTo = (id: string) => {
+    setQuestsOpen(false);
+    setOpen(id);
+  };
+  /** Next worker that needs the user, in street order, after the open one. */
+  const nextWaiting = () => {
+    const waiting = lots.flatMap((l) => l.workers).filter((w) => w.state === 'waiting');
+    if (!waiting.length) return;
+    const at = waiting.findIndex((w) => w.id === open);
+    talkTo(waiting[(at + 1) % waiting.length].id);
+  };
+
+  // Keys: arrows pan, Home re-sorts and goes to the left end, F11 toggles full screen, Tab and Q talk.
+  // The dialogue box handles its own keys (Esc, menu arrows) while it is open.
+  const keys = useRef({ pan, home, nextWaiting, boxOpen: false, questsOpen });
+  keys.current = { pan, home, nextWaiting, boxOpen: !!openSession, questsOpen };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key === 'ArrowLeft') keys.current.pan(-ARROW_PAN);
-      else if (e.key === 'ArrowRight') keys.current.pan(ARROW_PAN);
-      else if (e.key === 'Home') keys.current.home();
+      const k = keys.current;
+      if (e.key === 'ArrowLeft' && !k.boxOpen) k.pan(-ARROW_PAN);
+      else if (e.key === 'ArrowRight' && !k.boxOpen) k.pan(ARROW_PAN);
+      else if (e.key === 'Home') k.home();
       else if (e.key === 'F11') postFullscreen();
+      else if (e.key === 'Tab') k.nextWaiting();
+      else if (e.key === 'q' || e.key === 'Q') setQuestsOpen((q) => !q);
+      else if (e.key === 'Escape' && k.questsOpen) setQuestsOpen(false);
       else return;
       e.preventDefault();
     };
@@ -105,18 +146,28 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Drag to pan.
-  const drag = useRef<{ x: number; cam: number } | null>(null);
+  // Drag to pan; a press and release within CLICK_SLOP_PX is a click on a worker.
+  const drag = useRef<{ x: number; y: number; cam: number; moved: boolean } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     // A press on a button (edge arrow) must stay a click: capturing would retarget it to the stage.
     if (e.button !== 0 || (e.target as Element).closest('button')) return;
-    drag.current = { x: e.clientX, cam: camX };
+    drag.current = { x: e.clientX, y: e.clientY, cam: camX, moved: false };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (drag.current) setCam(clampCamera(drag.current.cam - (e.clientX - drag.current.x) / scale, world, viewW));
+    const d = drag.current;
+    if (!d) return;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) >= CLICK_SLOP_PX) d.moved = true;
+    setCam(clampCamera(d.cam - (e.clientX - d.x) / scale, world, viewW));
   };
-  const onPointerUp = () => void (drag.current = null);
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d || d.moved || e.type !== 'pointerup') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const hit = workerAt(lots, (e.clientX - rect.left) / scale + camX, (e.clientY - rect.top) / scale);
+    if (hit) talkTo(hit.session.id);
+  };
   const onPointerEnter = () => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
     leaveTimer.current = null;
@@ -175,7 +226,7 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
       </header>
       <div
         ref={stageRef}
-        className="town-stage"
+        className={`town-stage${openSession ? ' town-dim' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -232,6 +283,16 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
           />
         ))}
       </nav>
+      {openSession && openLot && !questsOpen && (
+        <DialogueBox
+          key={openSession.id}
+          session={openSession}
+          lotName={openLot.name}
+          index={openLot.workers.findIndex((w) => w.id === openSession.id)}
+          onClose={() => setOpen(null)}
+        />
+      )}
+      {questsOpen && <QuestLog quests={questsFor(lots, seen)} now={now} onOpen={talkTo} onClose={() => setQuestsOpen(false)} />}
     </div>
   );
 }

@@ -1,8 +1,17 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { agent, instance, project, svc } from '../test/fixtures';
 
 vi.mock('../state/actions', () => ({ loadProjects: vi.fn(), dismissToast: vi.fn() }));
+const ok = { ok: true, affected: [], logTail: [] };
+const api = {
+  townFocus: vi.fn(() => Promise.resolve(ok)),
+  townSend: vi.fn(() => Promise.resolve(ok)),
+  townAnswer: vi.fn(() => Promise.resolve(ok)),
+  townOpen: vi.fn(() => Promise.resolve(ok)),
+};
+vi.mock('../api/client', () => ({ api }));
+const { workerSpot } = await import('../lib/town/render');
 
 const { TownView } = await import('./TownView');
 const { dispatch } = await import('../state/store');
@@ -152,5 +161,94 @@ describe('TownView', () => {
     const { onLeave } = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Leave town' }));
     expect(onLeave).toHaveBeenCalled();
+  });
+
+  describe('talking to workers', () => {
+    /** Presses and releases on the screen point of lot `i`'s worker `k` (zoom 3, camera 0). */
+    const clickWorker = (i: number, k: number, state: Parameters<typeof workerSpot>[2], move = 0) => {
+      const [x, y] = workerSpot(i, k, state);
+      const stage = document.querySelector('.town-stage')!;
+      fireEvent.pointerDown(stage, { button: 0, pointerId: 1, clientX: x * 3, clientY: (y - 6) * 3 });
+      if (move) fireEvent.pointerMove(stage, { pointerId: 1, clientX: x * 3 + move, clientY: (y - 6) * 3 });
+      fireEvent.pointerUp(stage, { button: 0, pointerId: 1, clientX: x * 3 + move, clientY: (y - 6) * 3 });
+    };
+    const dialog = () => screen.queryByRole('dialog');
+
+    it('clicking a worker opens its dialogue', () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'idle' })]);
+      clickWorker(0, 0, 'idle');
+      expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
+      expect(document.querySelector('.town-stage')!.classList.contains('town-dim')).toBe(true);
+    });
+
+    it('a drag does not open a dialogue', () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'idle' })]);
+      clickWorker(0, 0, 'idle', 20);
+      expect(dialog()).toBeNull();
+    });
+
+    it('Tab cycles workers that need you', () => {
+      setup(undefined, [
+        agent('w1', { project: 'alpha', state: 'waiting', since: '2026-10-28T10:00:00Z' }),
+        agent('x', { project: 'beta', state: 'working' }),
+        agent('w2', { project: 'gamma', state: 'waiting', since: '2026-10-28T10:05:00Z' }),
+      ]);
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(dialog()?.getAttribute('aria-label')).toBe('GAMMA · Session A');
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
+    });
+
+    it('Q shows the quest log; a quest opens; a seen done session leaves the log', () => {
+      setup(undefined, [agent('w1', { project: 'alpha', state: 'waiting', message: 'Which db?' }), agent('d1', { project: 'beta', state: 'done' })]);
+      fireEvent.keyDown(window, { key: 'q' });
+      const quests = () => [...document.querySelectorAll('.quest-title')].map((e) => e.textContent);
+      expect(quests()).toEqual(['alpha: Which db?', "Review beta's result"]);
+      fireEvent.click(screen.getByRole('button', { name: /Review beta's result/ }));
+      expect(dialog()?.getAttribute('aria-label')).toBe('BETA · Session A');
+      fireEvent.keyDown(window, { key: 'Escape' });
+      fireEvent.keyDown(window, { key: 'q' });
+      expect(quests()).toEqual(['alpha: Which db?']);
+    });
+
+    it('keys typed in the message box do not move the town', () => {
+      const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+      setup(projects, [agent('s1', { project: 'p00', state: 'done', canSend: true })]);
+      clickWorker(0, 0, 'done');
+      const box = screen.getByRole('textbox', { name: 'Message' });
+      for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'q', 'Tab', 'Home']) fireEvent.keyDown(box, { key });
+      expect(labels()).toContain('p00');
+      expect(document.querySelector('.quest-log')).toBeNull();
+      expect(dialog()).toBeTruthy();
+    });
+
+    it('the box closes when its session ends', () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'idle' })]);
+      clickWorker(0, 0, 'idle');
+      act(() => dispatch({ type: 'agentEnd', id: 's1' }));
+      expect(dialog()).toBeNull();
+    });
+
+    it('the box switches to "Answer it there" when the prompt is released', () => {
+      const prompt = { requestId: 'r1', toolName: 'Bash', summary: 'npm i', answerable: true };
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'waiting', prompts: [prompt] })]);
+      fireEvent.keyDown(window, { key: 'Tab' });
+      expect(screen.getByRole('menu')).toBeTruthy();
+      act(() => dispatch({ type: 'agent', agent: agent('s1', { project: 'alpha', state: 'waiting', prompts: [{ ...prompt, answerable: false }] }) }));
+      expect(screen.queryByRole('menu')).toBeNull();
+      fireEvent.keyDown(window, { key: ' ' });
+      expect(document.querySelector('.dlg-text')!.textContent).toBe('I asked in my window: npm i. Answer it there.');
+    });
+
+    it('reports focus while mounted', () => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      api.townFocus.mockClear();
+      setup();
+      expect(api.townFocus).toHaveBeenLastCalledWith(true);
+      cleanup();
+      expect(api.townFocus).toHaveBeenLastCalledWith(false);
+    });
   });
 });
