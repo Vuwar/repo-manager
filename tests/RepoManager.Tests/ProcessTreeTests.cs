@@ -30,6 +30,25 @@ public class ProcessTreeTests
     [Fact]
     public void Ancestors_UnknownPid_Empty() => Assert.Empty(ProcessTree.Ancestors(int.MaxValue - 7));
 
+    [Fact]
+    public void WindowOwner_FirstWithAWindow()
+    {
+        var chain = new[] { (10, "claude.exe", false), (11, "pwsh.exe", false), (12, "WindowsTerminal.exe", true), (13, "explorer.exe", true) };
+        Assert.Equal(12, WindowActivator.WindowOwner(chain));
+    }
+
+    [Theory]
+    [InlineData("explorer.exe")]
+    [InlineData("RepoManager.exe")]
+    [InlineData("services.exe")]
+    [InlineData("svchost.exe")]
+    public void WindowOwner_StopsAtSystemAndShellProcesses(string stop)
+    {
+        // A classic console session: conhost is a sibling, so the chain reaches the desktop shell first.
+        var chain = new[] { (10, "claude.exe", false), (11, "cmd.exe", false), (12, stop, true), (13, "Code.exe", true) };
+        Assert.Null(WindowActivator.WindowOwner(chain));
+    }
+
     [Theory]
     [InlineData("local_02aa5842-e589-447f-977c-bcc353a67bbb", true)]
     [InlineData("local_x", true)]

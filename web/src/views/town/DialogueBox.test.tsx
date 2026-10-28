@@ -12,6 +12,7 @@ const api = {
 vi.mock('../../api/client', () => ({ api }));
 
 const { DialogueBox } = await import('./DialogueBox');
+const { dispatch } = await import('../../state/store');
 
 const text = () => document.querySelector('.dlg-text')!.textContent;
 
@@ -89,6 +90,32 @@ describe('DialogueBox', () => {
     expect(api.townSend).toHaveBeenCalledWith('a', 'next step');
     expect(box.value).toBe('');
     expect(screen.getByText('Sent.')).toBeTruthy();
+  });
+
+  it('the message line keeps focus while sending', async () => {
+    let finish: (v: typeof ok) => void = () => {};
+    api.townSend.mockReturnValue(new Promise((r) => (finish = r)));
+    show(agent('a', { state: 'done', canSend: true }));
+    const box = screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
+    box.focus();
+    fireEvent.change(box, { target: { value: 'one' } });
+    await act(async () => void fireEvent.keyDown(box, { key: 'Enter' }));
+    expect(box.disabled).toBe(false);
+    expect(box.readOnly).toBe(true);
+    await act(async () => finish(ok));
+    expect(box.readOnly).toBe(false);
+    expect(document.activeElement).toBe(box);
+  });
+
+  it('a working box does not retype what is already shown', () => {
+    const first = agent('a', { state: 'working', prompt: 'fix it', message: 'Used Read' });
+    dispatch({ type: 'agentsLoaded', agents: [first] });
+    show(first);
+    fireEvent.keyDown(window, { key: ' ' });
+    const before = text()!;
+    expect(before).toContain('Used Read');
+    act(() => dispatch({ type: 'agent', agent: { ...first, message: 'Used Bash' } }));
+    expect(text()!.startsWith(before)).toBe(true);
   });
 
   it('a failed send keeps the text and offers Open window', async () => {

@@ -34,7 +34,12 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
   // Typewriter: restarts when the text changes.
   const [shown, setShown] = useState(0);
   const done = shown >= d.text.length;
-  useLayoutEffect(() => setShown(reducedMotion() ? d.text.length : 0), [d.text]);
+  // New text that only extends what is already shown (a working session's next tool) keeps the shown part.
+  const typed = useRef('');
+  useLayoutEffect(() => {
+    setShown((n) => (reducedMotion() ? d.text.length : d.text.startsWith(typed.current.slice(0, n)) ? n : 0));
+    typed.current = d.text;
+  }, [d.text]);
   useEffect(() => {
     if (done) return;
     const t = setInterval(() => setShown((n) => n + 1), 1000 / TYPE_CPS);
@@ -62,6 +67,7 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
   // Message line.
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const input = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const send = async () => {
     const text = draft.trim();
@@ -69,6 +75,8 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
     setSending(true);
     const r = await api.townSend(session.id, text);
     setSending(false);
+    // Keep typing in the box: follow-up keys must not reach the town.
+    input.current?.focus();
     if (r.ok) setDraft('');
     setStatus(r.ok ? { ok: true, text: 'Sent.' } : { ok: false, text: r.error ?? 'Could not send.' });
   };
@@ -134,7 +142,9 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
               aria-label="Message"
               rows={1}
               value={draft}
-              disabled={sending}
+              ref={input}
+              // readOnly, not disabled: a disabled textarea drops focus and the next keys would reach the town.
+              readOnly={sending}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
