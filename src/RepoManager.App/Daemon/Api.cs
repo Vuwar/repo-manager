@@ -332,9 +332,20 @@ public static class Api
         api.MapGet("/town/sessions", () => d.Agents.Snapshot());
     }
 
-    /// <summary>Records when the session's Claude process started, so "Open window" can tell it from a reused pid.</summary>
-    private static AgentHookEvent WithProcessStart(AgentHookEvent e) =>
-        e.ClaudePid is { } pid ? e with { ClaudeStarted = ProcessTree.StartTime(pid) } : e;
+    /// <summary>
+    /// Adds what the hook input does not carry: when the session's Claude process started (so "Open window" can tell
+    /// it from a reused pid) and, at the end of a turn or on start, the session title and the whole last turn.
+    /// </summary>
+    private static AgentHookEvent WithProcessStart(AgentHookEvent e)
+    {
+        if (e.ClaudePid is { } pid) e = e with { ClaudeStarted = ProcessTree.StartTime(pid) };
+        if (e.Kind is "Stop" or "StopFailure" or "SessionStart")
+        {
+            var (title, turn) = TranscriptReader.Read(e.TranscriptPath, e.SessionId);
+            e = e with { TranscriptTitle = title, LastTurn = e.Kind == "SessionStart" ? null : turn };
+        }
+        return e;
+    }
 
     /// <summary>The command for shell tools, else the tool name.</summary>
     private static string PermissionSummary(AgentHookEvent e)

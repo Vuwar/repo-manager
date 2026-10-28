@@ -160,22 +160,62 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         };
     }
 
+    private const int TitleMax = 48;
+
+    private static bool IsWrapUp(string? tool) =>
+        tool != null && tool.StartsWith("mcp__ccd_turn__", StringComparison.Ordinal) && tool.EndsWith("wrap_up", StringComparison.Ordinal);
+
+    private static WrapUpDto? ParseWrapUp(string? json)
+    {
+        if (json == null) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            string? Str(System.Text.Json.JsonElement el, string name) =>
+                el.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            var actions = new List<WrapUpActionDto>();
+            if (root.TryGetProperty("actions", out var list) && list.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (var a in list.EnumerateArray())
+                    if (a.ValueKind == System.Text.Json.JsonValueKind.Object && Str(a, "label") is { } label && Str(a, "message") is { } message)
+                        actions.Add(new WrapUpActionDto(label, message));
+            var w = new WrapUpDto { Recap = Str(root, "recap"), Ask = Str(root, "ask"), Actions = actions };
+            return w.Ask == null && w.Recap == null && actions.Count == 0 ? null : w;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
     private static AgentSessionDto Next(AgentSessionDto s, AgentHookEvent e) => e.Kind switch
     {
-        "SessionStart" => s with { State = "idle", Message = "Session started" },
-        "UserPromptSubmit" => s with { State = "working", Prompt = e.Prompt, Message = Clip(e.Prompt ?? "") },
+        "SessionStart" => s with { State = "idle", Message = "Session started", Title = e.TranscriptTitle ?? s.Title },
+        "UserPromptSubmit" => s with
+        {
+            State = "working",
+            Prompt = e.Prompt,
+            Message = Clip(e.Prompt ?? ""),
+            WrapUp = null,
+            LastTurn = null,
+            Title = s.Title ?? (e.Prompt is { Length: > 0 } p ? Clip(p, TitleMax) : null),
+        },
+        // The desktop app's end-of-turn card: a recap, a question and suggested replies.
+        "PostToolUse" when IsWrapUp(e.ToolName) && ParseWrapUp(e.ToolInputJson) is { } w =>
+            s with { WrapUp = w, Message = Clip(w.Ask ?? w.Recap ?? s.Message) },
         // done and failed stay until the next prompt.
         "PostToolUse" when s.State is not ("done" or "failed") => s with { State = "working", Message = "Used " + e.ToolName },
         "Notification" when e.NotificationType is { } t && WaitingNotifications.Contains(t) =>
             s with { State = "waiting", Message = Clip(e.Message ?? "Needs you") },
-        "Stop" => s with { State = "done", LastReply = e.LastReply, Message = Clip(e.LastReply ?? "Done") },
+        "Stop" => s with { LastTurn = e.LastTurn, Title = e.TranscriptTitle ?? s.Title, State = "done", LastReply = e.LastReply, Message = Clip(e.LastReply ?? "Done") },
         // StopFailure: the turn ended on an API error; last_assistant_message is the error text.
         "StopFailure" => s with { State = "failed", Message = Clip(e.LastReply ?? "Failed") },
         // PermissionRequest: the permission broker owns the waiting state.
         _ => s,
     };
 
-    private static string Clip(string text) => text.Length <= MessageMax ? text : text[..MessageMax];
+    private static string Clip(string text, int max = MessageMax) => text.Length <= max ? text : text[..max];
 
     private static string FolderName(string cwd)
     {

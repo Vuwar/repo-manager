@@ -37,7 +37,23 @@ public sealed record AgentSessionDto
     /// <summary>The daemon knows this session's inbox, so a message can be sent to it.</summary>
     public bool CanSend { get; init; }
     public IReadOnlyList<PermissionPromptDto> Prompts { get; init; } = [];
+    /// <summary>The session's title (the desktop app's name for it), else its first prompt shortened.</summary>
+    public string? Title { get; init; }
+    /// <summary>Every assistant message of the last turn, oldest first, separated by blank lines; null when unknown.</summary>
+    public string? LastTurn { get; init; }
+    /// <summary>A question the session left for the user with suggested replies (the desktop app's turn wrap-up card).</summary>
+    public WrapUpDto? WrapUp { get; init; }
 }
+
+/// <summary>Claude's end-of-turn summary and question, with replies the user can pick (each sends its Message).</summary>
+public sealed record WrapUpDto
+{
+    public string? Recap { get; init; }
+    public string? Ask { get; init; }
+    public IReadOnlyList<WrapUpActionDto> Actions { get; init; } = [];
+}
+
+public sealed record WrapUpActionDto(string Label, string Message);
 
 public sealed record PermissionPromptDto
 {

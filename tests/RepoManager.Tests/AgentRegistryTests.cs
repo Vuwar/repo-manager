@@ -213,6 +213,52 @@ public class AgentRegistryTests
         Assert.Null(_reg.ProcessFor("s1"));
     }
 
+    private const string WrapUpInput = """
+        {"recap":"14.sql is applied.","ask":"Commit the changes?",
+         "actions":[{"label":"Commit","message":"Commit the sales query speedups"},{"label":"Not yet","message":"Not yet"}]}
+        """;
+
+    [Fact]
+    public void WrapUp_KeptThroughStop_ClearedByNextPrompt()
+    {
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "apply 14.sql"));
+        var s = _reg.Apply(Ev("PostToolUse", tool: "mcp__ccd_turn__wrap_up") with { ToolInputJson = WrapUpInput })!;
+        Assert.Equal("Commit the changes?", s.WrapUp?.Ask);
+        Assert.Equal("14.sql is applied.", s.WrapUp?.Recap);
+        Assert.Equal(["Commit", "Not yet"], s.WrapUp!.Actions.Select(a => a.Label));
+        Assert.Equal("Commit the sales query speedups", s.WrapUp.Actions[0].Message);
+        Assert.Equal("Commit the changes?", s.Message);
+        Assert.NotNull(_reg.Apply(Ev("Stop", lastReply: "Done."))!.WrapUp);
+        Assert.Null(_reg.Apply(Ev("UserPromptSubmit", prompt: "commit"))!.WrapUp);
+    }
+
+    [Fact]
+    public void Title_FromFirstPrompt_UntilTheTranscriptNamesIt()
+    {
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "Investigate why the import job fails on large files every night"));
+        Assert.Equal("Investigate why the import job fails on large fi", _reg.Snapshot().Single().Title);
+        _reg.Apply(Ev("UserPromptSubmit", prompt: "another prompt"));
+        Assert.StartsWith("Investigate", _reg.Snapshot().Single().Title);
+        _reg.Apply(Ev("Stop", lastReply: "x") with { TranscriptTitle = "Error investigation" });
+        Assert.Equal("Error investigation", _reg.Snapshot().Single().Title);
+    }
+
+    [Fact]
+    public void LastTurn_SetOnStop_ClearedByNextPrompt()
+    {
+        var s = _reg.Apply(Ev("Stop", lastReply: "second") with { LastTurn = "first\n\nsecond" })!;
+        Assert.Equal("first\n\nsecond", s.LastTurn);
+        Assert.Null(_reg.Apply(Ev("UserPromptSubmit", prompt: "more"))!.LastTurn);
+    }
+
+    [Fact]
+    public void WrapUp_BadInput_Ignored()
+    {
+        var s = _reg.Apply(Ev("PostToolUse", tool: "mcp__ccd_turn__wrap_up") with { ToolInputJson = "{not json" })!;
+        Assert.Null(s.WrapUp);
+        Assert.Equal("working", s.State);
+    }
+
     [Fact]
     public void Token_NeverInDto()
     {

@@ -20,7 +20,10 @@ public sealed record AgentHookEvent(
     string Surface,
     string? HostSessionId,
     int? ClaudePid = null,
-    DateTime? ClaudeStarted = null);
+    DateTime? ClaudeStarted = null,
+    string? TranscriptPath = null,
+    string? TranscriptTitle = null,
+    string? LastTurn = null);
 
 public static class HookEventParser
 {
@@ -57,7 +60,8 @@ public static class HookEventParser
                 Token: env.Token,
                 Surface: SurfaceFor(env.Entrypoint),
                 HostSessionId: env.HostSessionId,
-                ClaudePid: env.ClaudePid is > 0 ? env.ClaudePid : null);
+                ClaudePid: env.ClaudePid is > 0 ? env.ClaudePid : null,
+                TranscriptPath: Str(root, "transcript_path"));
         }
         catch (JsonException)
         {
