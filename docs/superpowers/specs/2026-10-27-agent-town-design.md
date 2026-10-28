@@ -1,7 +1,7 @@
 # Agent Town design
 
-Date: 2026-10-27
-Status: ready for user review
+Date: 2026-10-27 (updated 2026-10-28 with what was decided while building plans 1 to 3)
+Status: plans 1 to 3 built (backend, town screen, dialogue and permissions); plans 4 and 5 to do
 
 ## Intent
 
@@ -80,7 +80,9 @@ Tested on 2026-10-27 against a desktop session (Claude Code 2.1.308, desktop app
 - The hook waits for a town answer only while the town window is focused. When the town loses focus (or is closed), every waiting hook returns "no decision" at once and the normal permission dialog appears in the session window.
 - A prompt that arrives while the town is not focused gets "no decision" immediately; there is no grace wait (user's decision). In the town it shows as "Answer in the window" with "Open window", and still appears on the street and in the quest log.
 - Whichever comes first wins. If the user answers in the session window, the town removes the prompt when the next hook event for that session arrives.
-- "Always OK" maps to the hook's way of adding an allow rule for the session if one exists; otherwise it behaves as "Go ahead". (Builder to check what the hook output supports.)
+- "Always OK" returns the hook input's `permission_suggestions` as `updatedPermissions`, with every entry's `destination` forced to `session`, so the rule lasts for that session only and is never written to a settings file. With no suggestions it behaves as "Go ahead". "No, don't" denies with a message telling Claude the user declined it in Agent Town.
+- Focus is a lease, not a flag: the town reports `focused:true` every 5 s while the main window has focus and is in town mode, and `false` at once when that stops (window deactivated, page hidden, town left). The daemon drops focus by itself 15 s after the last report, so a town that crashes or misses its "unfocused" message can never keep sessions waiting. Focus reports are sent in order.
+- A prompt released by focus loss or the time-out stays listed as "Answer in the window" until the session's next non-notification event. Answering it from the town afterwards says "Already answered in the window." A double click sends one answer.
 - Timeout on the hook itself is long (several minutes) but the focus rule ends it much sooner in practice.
 
 ### State rules (Claude's calls)
@@ -92,13 +94,13 @@ Tested on 2026-10-27 against a desktop session (Claude Code 2.1.308, desktop app
 
 ### Town window (Claude's call)
 
-The town is a fourth `UiMode` of the existing main window, not a separate window. Entering town mode maximises the window (F11 toggles borderless full screen); leaving restores the previous bounds, like the Mini view does. "Town focused" means the main window has focus and is in town mode.
+The town is a fourth `UiMode` of the existing main window, not a separate window. Entering town mode maximises the window (F11 toggles borderless full screen, Esc with nothing open leaves it); leaving restores the previous bounds, like the Mini view does. "Town focused" means the main window has focus and is in town mode. The scene is drawn at a whole number of device pixels per scene pixel, so it stays crisp at 125% and 150% display scaling.
 
 ### Hook cost (Claude's call)
 
 Hooks fire on every tool call in every session, so they must not slow sessions down.
 - An "Agent Town" setting controls whether `claude-setup` installs the town hooks; on by default.
-- Status hooks (SessionStart, UserPromptSubmit, PostToolUse, Notification, Stop, SessionEnd) are fire-and-forget: short timeout (about 1 s), always exit 0, no output. Use Claude Code's async hook option if it exists; otherwise keep the process as small and fast as possible.
+- Status hooks (SessionStart, UserPromptSubmit, PostToolUse, Notification, Stop, StopFailure, SessionEnd) are fire-and-forget: they give up after 1 s, always exit 0 and print nothing. All of them run with Claude Code's `async: true` option except SessionEnd, which runs in line so it arrives before the session exits. Async hooks are not ordered, so an event that arrives up to 2 minutes after SessionEnd cannot bring the session back.
 - Only `PermissionRequest` may wait, and only under the rule in the permission section.
 
 ### Game elements
@@ -140,17 +142,33 @@ Findings from reading the code (2026-10-27):
 | --- | --- |
 | SessionStart | worker appears (idle); inbox address and token registered |
 | UserPromptSubmit | working; prompt text shown |
-| PostToolUse | working; tool name shown |
+| PostToolUse | working; tool name shown. For the desktop app's `mcp__ccd_turn__wrap_up` tool, its recap, question and reply buttons are kept until the next prompt |
 | PermissionRequest | needs you; waits for a town answer while the town is focused |
 | Notification (permission, elicitation types) | needs you |
-| Stop | done; last message shown; never waits |
+| Stop | done; the whole last turn shown (read from the transcript); never waits |
+| StopFailure | failed (the turn ended on an API error); the error text shown; stays until the next prompt |
 | SessionEnd | worker walks away; inbox forgotten |
 
-Failed state: Claude Code has no general "failed" hook. Builder to check for a tool-failure or stop-failure hook; if none, failed is only set through the API.
+Failed state: Claude Code's `StopFailure` hook reports a turn that ended on an API error (rate limit, overload, authentication and so on); it maps to failed.
 
 ## Existing uncommitted work
 
 The working tree has uncommitted Mini view work (`MiniView.tsx`, `ambient.ts`, `host.ts`, `ScreenSampler.cs`, changes to `App.tsx`, `simple.ts`, `MainForm.cs`, `styles.css`, `SimpleView.tsx`, `Icon.tsx`). It touches the same mode switch, shell messages and styles. It must be committed (or set aside by the user) before Agent Town work starts. The town should reuse `host.ts` for shell messages.
+
+## Built so far, and decisions made while building (2026-10-28)
+
+Plans 1 to 3 are built and pushed: the backend (hooks, registry, inbox, permission broker, `/api/town/*`), the town screen (street, minimap, edge arrows, labels, title count) and the dialogue (box, permission menu, sending, quest log, "Open window"). These points were decided along the way; not all of them are in the sections above.
+
+- **Messages from the town say they come from the user.** Claude Code shows inbox messages as coming from "another Claude session", and a session then answered that other session instead of the user. Every town message now starts with "[From the user, typed in RepoManager Agent Town (their view of all sessions). Reply here in this session, as you would to them.]". It still grants no permission.
+- **Open window.** A desktop session opens with `claude://code/continue?session=<CLAUDE_CODE_HOST_SESSION_ID>`, a link found in the desktop app's own handler (undocumented; the app checks the id against `^local_[A-Za-z0-9-]{1,64}$`). Otherwise RepoManager brings forward the window of the session's Claude process: the hook sends the nearest `claude*.exe` ancestor's pid, and the daemon walks up from it to the first process with a window, stopping at the desktop shell and system processes. The pid is stored with its start time, so a reused pid is never activated.
+- **Session titles.** The name tag shows the desktop app's title for the session (the transcript's `custom-title` or `agent-name` line), else the first prompt shortened to 48 characters, instead of "Session A".
+- **The whole last turn.** The Stop hook only carries the last assistant message, so the daemon reads the end of the session's transcript (only `<session id>.jsonl`, at most the last 1 MB) for every assistant message since the last prompt.
+- **The wrap-up card.** The desktop app's end-of-turn card ("Commit / Not yet") is the MCP tool `mcp__ccd_turn__wrap_up` with `recap`, `ask` and `actions[{label, message}]`. The town shows it in the box with the same reply buttons (a button sends its message), and its question becomes the quest title.
+- **Markdown.** Claude's replies are rendered as Markdown (headings, lists, code blocks, bold, italic, inline code) as React text, never HTML. Links show their text; links to other desktop sessions (`#local_...`) open that worker's box, or the session in Claude when it is not in the town.
+- **Working box.** It shows the current prompt and the last five status messages; new messages extend the text without retyping it.
+- **Keyboard.** Click, Tab (only when someone needs the user) and the quest log (Q) open a box; Esc closes it. Town keys never fire while typing in the box. A half-typed message survives the quest log.
+- **Focus reporting** was planned for the attention phase but moved into plan 3, because the permission menu cannot work without it.
+- **Not built yet:** workers walking in and away (plan 5), attention when the town is not focused (plan 4), the "Agent Town" setting in the app (today only `devm claude-setup --no-town`; plan 4), game elements (plan 5).
 
 ## Left to the builder
 
@@ -158,6 +176,6 @@ The working tree has uncommitted Mini view work (`MiniView.tsx`, `ambient.ts`, `
 - Canvas engine details, sprite art, sounds (the prototype's square-wave beeps are a fine start).
 - How the minimap and camera are implemented.
 - Exact XP numbers and level thresholds.
-- How "Open window" opens a desktop session (the desktop app may have a session link); for terminal sessions, it may only be able to say "in terminal".
+- How "Open window" opens a desktop session: decided, see "Built so far".
 - Stale session cleanup (the prototype drops sessions untouched for 8 hours).
 - Splitting the work into phases. A sensible order: daemon events and hook, then town screen read-only, then dialogue and inbox sending, then permissions, then notifications, then game elements.
