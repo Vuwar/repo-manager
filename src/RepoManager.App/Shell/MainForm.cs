@@ -106,7 +106,8 @@ public sealed class MainForm : Form
                     SetMode(root.GetProperty("mode").GetString() ?? "");
                     break;
                 case "fullscreen":
-                    ToggleFullScreen();
+                    // F11 toggles; Esc sends on=false.
+                    SetFullScreen(root.TryGetProperty("on", out var on) ? on.GetBoolean() : FormBorderStyle != FormBorderStyle.None);
                     break;
                 case "topmost":
                     // Can arrive before the mode message; it applies once the window is compact.
@@ -163,13 +164,12 @@ public sealed class MainForm : Form
     }
 
     /// <summary>Town only: borderless and maximised (covers the taskbar), or back to a normal maximised window.</summary>
-    private void ToggleFullScreen()
+    private void SetFullScreen(bool on)
     {
-        if (!_town) return;
-        var full = FormBorderStyle == FormBorderStyle.None;
+        if (!_town || on == (FormBorderStyle == FormBorderStyle.None)) return;
         // Changing the border of a maximised window does not resize it; go through Normal.
         WindowState = FormWindowState.Normal;
-        FormBorderStyle = full ? FormBorderStyle.Sizable : FormBorderStyle.None;
+        FormBorderStyle = on ? FormBorderStyle.None : FormBorderStyle.Sizable;
         WindowState = FormWindowState.Maximized;
     }
 

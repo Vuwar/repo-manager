@@ -153,6 +153,49 @@ describe('TownView', () => {
     expect(labels()).not.toContain('p00');
   });
 
+  it('uses whole device pixels at 150% display scaling', () => {
+    vi.spyOn(window, 'devicePixelRatio', 'get').mockReturnValue(1.5);
+    setup();
+    // 540 CSS px = 810 device px: zoom 4 device px per scene pixel, i.e. 4 / 1.5 CSS px.
+    const label = document.querySelector('.town-label') as HTMLElement;
+    expect(parseFloat(label.style.top)).toBeCloseTo((171 * 4) / 1.5, 3);
+    const canvas = document.querySelector('canvas.town-canvas') as HTMLCanvasElement;
+    expect(canvas.width).toBe(1440);
+    expect(canvas.height).toBe(810);
+  });
+
+  it('re-measures when the stage itself resizes', () => {
+    let resized: (() => void) | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          resized = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    setup(projects);
+    const before = labels().length;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1920);
+    act(() => resized!());
+    expect(labels().length).toBeGreaterThan(before);
+    vi.unstubAllGlobals();
+  });
+
+  it('Esc with nothing open asks the shell to leave full screen', () => {
+    const posted: unknown[] = [];
+    (window as unknown as { chrome: unknown }).chrome = {
+      webview: { postMessage: (m: unknown) => posted.push(m), addEventListener: () => {}, removeEventListener: () => {} },
+    };
+    setup();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(posted).toContainEqual({ type: 'fullscreen', on: false });
+    delete (window as unknown as { chrome?: unknown }).chrome;
+  });
+
   it('shows an empty state with no projects and no sessions', () => {
     setup([], []);
     expect(screen.getByText(/No projects yet/)).toBeTruthy();

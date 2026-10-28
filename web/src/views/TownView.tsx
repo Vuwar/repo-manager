@@ -71,20 +71,30 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     return shown.map((k) => byKey.get(k)).filter((l): l is Lot => !!l);
   }, [street, shown]);
 
-  // Size: integer zoom so the 180 px scene fills the height.
+  // Size: a whole number of device pixels per scene pixel (crisp at 125% and 150% display scaling), as large as
+  // fits the height. `zoom` is the same in CSS pixels, for everything laid out over the canvas.
   const stageRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [size, setSize] = useState({ w: 0, h: 0, dpr: 1 });
   useLayoutEffect(() => {
     const measure = () => {
       const el = stageRef.current;
-      if (el) setSize((s) => (s.w === el.clientWidth && s.h === el.clientHeight ? s : { w: el.clientWidth, h: el.clientHeight }));
+      const dpr = window.devicePixelRatio || 1;
+      if (el)
+        setSize((s) => (s.w === el.clientWidth && s.h === el.clientHeight && s.dpr === dpr ? s : { w: el.clientWidth, h: el.clientHeight, dpr }));
     };
     measure();
+    // The stage also resizes without the window (the top bar wrapping, full screen); the window event covers zoom changes.
+    const observer = typeof ResizeObserver === 'function' && stageRef.current ? new ResizeObserver(measure) : null;
+    if (observer && stageRef.current) observer.observe(stageRef.current);
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, []);
-  const scale = scaleFor(size.h);
-  const viewW = size.w / scale;
+  const deviceScale = scaleFor(size.h * size.dpr);
+  const zoom = deviceScale / size.dpr;
+  const viewW = size.w / zoom;
   const world = worldWidth(lots.length);
 
   const [camRaw, setCam] = useState(0);
@@ -151,6 +161,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
       }
       else if (e.key === 'q' || e.key === 'Q') setQuestsOpen((q) => !q);
       else if (e.key === 'Escape' && k.questsOpen) setQuestsOpen(false);
+      // Nothing open: Esc leaves borderless full screen (the shell ignores it otherwise).
+      else if (e.key === 'Escape' && !k.boxOpen) postFullscreen(false);
       else return;
       e.preventDefault();
     };
@@ -170,14 +182,14 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     const d = drag.current;
     if (!d) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) >= CLICK_SLOP_PX) d.moved = true;
-    setCam(clampCamera(d.cam - (e.clientX - d.x) / scale, world, viewW));
+    setCam(clampCamera(d.cam - (e.clientX - d.x) / zoom, world, viewW));
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
     if (!d || d.moved || e.type !== 'pointerup') return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const hit = workerAt(lots, (e.clientX - rect.left) / scale + camX, (e.clientY - rect.top) / scale);
+    const hit = workerAt(lots, (e.clientX - rect.left) / zoom + camX, (e.clientY - rect.top) / zoom);
     if (hit) talkTo(hit.session.id);
   };
   const onPointerEnter = () => {
@@ -198,9 +210,9 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !size.w || !size.h || typeof requestAnimationFrame !== 'function') return;
-    canvas.width = size.w;
-    canvas.height = size.h;
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    canvas.width = Math.round(size.w * size.dpr);
+    canvas.height = Math.round(size.h * size.dpr);
+    ctx.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
     ctx.imageSmoothingEnabled = false;
     const reduced = prefersReducedMotion();
     const scene = new TownScene(reduced);
@@ -219,12 +231,12 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [size, scale]);
+  }, [size, deviceScale]);
 
   const [first, last] = visibleRange(camX, viewW, lots.length);
   const visible = lots.slice(first, last + 1).map((lot, k) => ({ lot, i: first + k }));
   const hints = edgeHints(lots, camX, viewW);
-  const toPx = (x: number) => (x - camX) * scale;
+  const toPx = (x: number) => (x - camX) * zoom;
 
   return (
     // Hover covers the stage and the minimap, so dots do not re-sort under the pointer.
@@ -248,11 +260,13 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
       >
         <canvas ref={canvasRef} className="town-canvas" aria-hidden="true" />
         {lots.length === 0 && (
-          <div className="town-empty">No projects yet. Add a repo in RepoManager, or start Claude Code in any folder.</div>
+          <div className="town-empty">
+            {projects === null ? 'Loading the town…' : 'No projects yet. Add a repo in RepoManager, or start Claude Code in any folder.'}
+          </div>
         )}
         {visible.map(({ lot, i }) => (
-          <div key={lot.key} className="town-label" style={{ left: toPx(lotX(i) + BW / 2), top: LABEL_Y * scale }}>
-            <span className="town-lot-name" style={{ ['--c' as string]: swatch(lot.group), maxWidth: (SLOT_W - 4) * scale }}>
+          <div key={lot.key} className="town-label" style={{ left: toPx(lotX(i) + BW / 2), top: LABEL_Y * zoom }}>
+            <span className="town-lot-name" style={{ ['--c' as string]: swatch(lot.group), maxWidth: (SLOT_W - 4) * zoom }}>
               {lot.name}
             </span>
             {lot.temporary && <span className="town-lot-note">not in RepoManager</span>}
@@ -264,7 +278,7 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
             if (!w.worktree) return [];
             const [x, y] = workerSpot(i, k, w.state);
             return [
-              <span key={w.id} className="town-sign" style={{ left: toPx(x), top: (y - 34) * scale }}>
+              <span key={w.id} className="town-sign" style={{ left: toPx(x), top: (y - 34) * zoom }}>
                 {w.worktree}
               </span>,
             ];

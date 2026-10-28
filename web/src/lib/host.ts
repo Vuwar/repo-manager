@@ -42,9 +42,9 @@ export function onWindowFocus(cb: (focused: boolean) => void): () => void {
   };
 }
 
-/** Toggles borderless full screen (town view only; the shell ignores it elsewhere). */
-export function postFullscreen(): void {
-  webview()?.postMessage({ type: 'fullscreen' });
+/** Toggles borderless full screen, or with `on` sets it (the shell ignores it outside the town). */
+export function postFullscreen(on?: boolean): void {
+  webview()?.postMessage(on === undefined ? { type: 'fullscreen' } : { type: 'fullscreen', on });
 }
 
 /** Keeps the window above other windows (compact view only). */
