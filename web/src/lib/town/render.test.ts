@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { agent } from '../../test/fixtures';
-import { SLOT_W } from './camera';
-import { paletteFor, TownScene, type Draw2D, type TownFrame } from './render';
+import { lotX, SLOT_W } from './camera';
+import { drawPortrait, paletteFor, TownScene, workerAt, workerColors, workerSpot, type Draw2D, type TownFrame } from './render';
 import type { Lot } from './street';
 
 /** Records draw calls; fillRect x is recorded in screen space (after the current translate). */
@@ -104,5 +104,42 @@ describe('TownScene', () => {
       expect(paletteFor(k)).toBeGreaterThanOrEqual(0);
       expect(paletteFor(k)).toBeLessThan(6);
     }
+  });
+});
+
+describe('workerAt', () => {
+  const lots = [
+    lot(0, { group: 'working', workers: [agent('a', { state: 'working' }), agent('b', { state: 'working' })] }),
+    lot(1, { group: 'waiting', workers: [agent('c', { state: 'waiting' })] }),
+  ];
+
+  it('finds a worker at its spot and at its bubble', () => {
+    const [x, y] = workerSpot(1, 0, 'waiting');
+    expect(workerAt(lots, x, y)?.session.id).toBe('c');
+    expect(workerAt(lots, x + 2, y - 24)?.session.id).toBe('c');
+    expect(workerAt(lots, x, y)).toMatchObject({ lot: 1, index: 0 });
+  });
+
+  it('finds nothing between workers', () => {
+    expect(workerAt(lots, 2, 10)).toBeNull();
+    expect(workerAt(lots, 48, 165)).toBeNull();
+  });
+
+  it('prefers the front-most worker where they overlap', () => {
+    // lot 0 working lanes: a at (12,158), b at (30,158); add a third at (21,164) overlapping both
+    const three = [lot(0, { group: 'working', workers: ['a', 'b', 'z'].map((id) => agent(id, { state: 'working' })) })];
+    expect(workerAt(three, lotX(0) + 16, 158)?.session.id).toBe('z');
+  });
+});
+
+describe('drawPortrait', () => {
+  it("uses the worker's own hat and shirt colours", () => {
+    const seen: string[] = [];
+    const { ctx } = fakeCtx();
+    const rec = new Proxy(ctx, { set: (t, k, v) => ((k === 'fillStyle' && seen.push(String(v)), ((t as Record<string, unknown>)[k as string] = v)), true) });
+    drawPortrait(rec, agent('portrait-1', { state: 'idle' }));
+    const { hat, shirt } = workerColors('portrait-1');
+    expect(seen).toContain(hat);
+    expect(seen).toContain(shirt);
   });
 });

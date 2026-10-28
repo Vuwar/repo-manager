@@ -393,7 +393,7 @@ export class TownScene {
 
   private drawWorker(w: AgentSessionDto, [x, y]: [number, number], now: number, still: boolean): void {
     const a = this.anims.get(w.id), st = w.state, t = still ? 0 : now / 1000, age = a ? (now - a.stateAt) / 1000 : 99;
-    const hh = hash(w.id), shirt = this.C(SHIRTS[(hh >>> 5) % 6]), hat = this.C(HATS[hh % 6]), skin = this.C(SKIN), pants = this.C(PANTS);
+    const colors = workerColors(w.id), shirt = this.C(colors.shirt), hat = this.C(colors.hat), skin = this.C(SKIN), pants = this.C(PANTS);
     const sit = st === 'idle', frame = Math.floor(t * 4.5) % 2;
     let fx = x, fy = y, arms: 'down' | 'up' | 'wave' | 'head' | 'hammer' = 'down';
     if (st === 'done' && age < 3.2 && !still) { fy -= Math.round(Math.abs(Math.sin(age * 7)) * 5 * (1 - age / 3.2)); arms = 'up'; }
@@ -468,6 +468,46 @@ export class TownScene {
 /** Building height: steady per lot, shorter for repos with no session. */
 function buildingHeight(lot: Lot): number {
   return lot.group === 'none' ? 26 : 34 + (hash(lot.key) % 3) * 4;
+}
+
+/** A worker's hat and shirt colours, the same on the street and in its portrait. */
+export function workerColors(id: string): { hat: string; shirt: string } {
+  const h = hash(id);
+  return { hat: HATS[h % 6], shirt: SHIRTS[(h >>> 5) % 6] };
+}
+
+/**
+ * The worker drawn at lot `index`, slot `k`, whose hit box (the body and the bubble above it) contains the world
+ * point; the front-most one (lowest on screen) wins.
+ */
+export function workerAt(lots: Lot[], worldX: number, worldY: number): { lot: number; index: number; session: AgentSessionDto } | null {
+  let best: { lot: number; index: number; session: AgentSessionDto; y: number } | null = null;
+  lots.forEach((lot, i) =>
+    lot.workers.slice(0, MAX_WORKERS).forEach((session, k) => {
+      const [x, y] = workerSpot(i, k, session.state);
+      if (worldX < x - 5 || worldX > x + 5 || worldY < y - 26 || worldY > y + 2) return;
+      if (!best || y > best.y) best = { lot: i, index: k, session, y };
+    }),
+  );
+  if (!best) return null;
+  const { lot, index, session } = best;
+  return { lot, index, session };
+}
+
+/** Head and shoulders of a worker in a 16 x 16 logical box, for the dialogue portrait. */
+export function drawPortrait(ctx: Draw2D, session: AgentSessionDto): void {
+  const { hat, shirt } = workerColors(session.id);
+  const R = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x, y, w, h);
+  };
+  ctx.clearRect(0, 0, 16, 16);
+  R(2, 12, 12, 4, shirt); R(3, 11, 10, 1, shirt);
+  R(5, 4, 6, 7, SKIN); R(6, 11, 4, 1, SKIN);
+  R(4, 3, 8, 2, hat); R(5, 1, 6, 2, hat);
+  const eye = session.state === 'failed' ? '#d9402f' : EYE;
+  R(6, 7, 1, 1, eye); R(9, 7, 1, 1, eye);
+  R(7, 9, 2, 1, session.state === 'done' ? '#b8735a' : '#d9a585');
 }
 
 /** Where worker `k` of lot `i` stands: at the anvil while working, by the door otherwise. */
