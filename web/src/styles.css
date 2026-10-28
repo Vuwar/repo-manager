@@ -3417,3 +3417,167 @@ details.advanced[open] {
 .town-dot:focus-visible {
   outline: 1px solid #fff;
 }
+
+/* ---- Agent Town dialogue (mockup: docs/superpowers/specs/agent-town/chat-box-v2.html) ---- */
+
+.dlg {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  min-height: 150px;
+  display: flex;
+  gap: 12px;
+  z-index: 5;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.dlg-portrait,
+.dlg-body,
+.dlg-menu {
+  background: #151a38;
+  border: 4px solid #f2ead4;
+  box-shadow: 0 0 0 4px #151a38;
+  color: #f2ead4;
+}
+.dlg-portrait {
+  position: relative;
+  flex: none;
+  width: 120px;
+  display: grid;
+  place-items: center;
+}
+.dlg-portrait canvas {
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+}
+.dlg-mood {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0 4px;
+  font-weight: bold;
+  color: #d9402f;
+  background: #fff6dc;
+  border: 2px solid #2a2f55;
+}
+.dlg-mood.ok {
+  color: #2f9e44;
+}
+.dlg-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 20px 18px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dlg-name {
+  position: absolute;
+  top: -16px;
+  left: 14px;
+  padding: 2px 10px;
+  font-weight: bold;
+  color: #151a38;
+  border: 3px solid #f2ead4;
+}
+.dlg-wait {
+  position: absolute;
+  top: -14px;
+  right: 14px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #98a1cf;
+  background: #151a38;
+  border: 2px solid #2d3668;
+}
+.dlg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow: auto;
+}
+.dlg-more {
+  position: absolute;
+  right: 14px;
+  top: 8px;
+  color: #ffc857;
+  animation: dlg-blink 1s steps(2, end) infinite;
+}
+@keyframes dlg-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dlg-more {
+    animation: none;
+  }
+}
+.dlg-note {
+  color: #98a1cf;
+}
+.dlg-note.bad {
+  color: #ff8a7a;
+}
+.dlg-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border-bottom: 2px dashed #98a1cf;
+}
+.dlg-input textarea {
+  flex: 1;
+  resize: none;
+  font: inherit;
+  color: #f2ead4;
+  background: transparent;
+  border: 0;
+  outline: none;
+  field-sizing: content;
+  max-height: 8lh;
+}
+.dlg-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+}
+.dlg-actions button,
+.dlg-menu button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.dlg-actions button {
+  color: #ffc857;
+  text-decoration: underline;
+}
+.dlg-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #98a1cf;
+}
+.dlg-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 16px);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px 8px 10px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.dlg-menu button::before {
+  content: '\00a0\00a0';
+}
+.dlg-menu button.cur {
+  color: #ffc857;
+}
+.dlg-menu button.cur::before {
+  content: '▶\00a0';
+}
