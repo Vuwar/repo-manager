@@ -198,6 +198,22 @@ public class TownApiTests(DaemonFixture f)
     }
 
     [Fact]
+    public async Task Open_UnknownSession_Fails() =>
+        Assert.False((await f.Post("api/town/open", new TownOpenRequest(NewId()))).Ok);
+
+    [Fact]
+    public async Task Open_NoPid_FailsWithReadableMessage()
+    {
+        var id = NewId();
+        // A terminal session (no desktop link) that never reported its process.
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", id), Entrypoint = "cli" });
+        var r = await f.Post("api/town/open", new TownOpenRequest(id));
+        Assert.False(r.Ok);
+        Assert.Contains("window", r.Error ?? r.Message);
+        await PostHook(HookJson("SessionEnd", id));
+    }
+
+    [Fact]
     public async Task Sessions_NeverContainToken()
     {
         var id = NewId();

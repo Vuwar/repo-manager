@@ -10,6 +10,8 @@ public sealed record TownHookEnvelope
     public string? Token { get; init; }
     public string? Entrypoint { get; init; }
     public string? HostSessionId { get; init; }
+    /// <summary>The session's Claude process (nearest claude*.exe above the hook), used to bring its window forward.</summary>
+    public int? ClaudePid { get; init; }
 }
 
 /// <summary>One Claude Code session on this machine. State: idle, working, waiting, done, failed.</summary>
@@ -54,3 +56,5 @@ public sealed record TownSendRequest(string SessionId, string Text);
 public sealed record PermissionAnswerRequest(string RequestId, string Behavior, bool Always);
 
 public sealed record TownFocusRequest(bool Focused);
+
+public sealed record TownOpenRequest(string SessionId);

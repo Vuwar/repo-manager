@@ -18,7 +18,8 @@ public sealed record AgentHookEvent(
     string? Socket,
     string? Token,
     string Surface,
-    string? HostSessionId);
+    string? HostSessionId,
+    int? ClaudePid = null);
 
 public static class HookEventParser
 {
@@ -54,7 +55,8 @@ public static class HookEventParser
                 Socket: env.Socket,
                 Token: env.Token,
                 Surface: SurfaceFor(env.Entrypoint),
-                HostSessionId: env.HostSessionId);
+                HostSessionId: env.HostSessionId,
+                ClaudePid: env.ClaudePid is > 0 ? env.ClaudePid : null);
         }
         catch (JsonException)
         {

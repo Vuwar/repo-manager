@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using RepoManager.Contracts;
+using RepoManager.Core.Agents;
 
 namespace RepoManager.Cli;
 
@@ -54,6 +55,8 @@ public static class TownHook
                 Token = Environment.GetEnvironmentVariable("CLAUDE_CODE_MESSAGING_TOKEN"),
                 Entrypoint = Environment.GetEnvironmentVariable("CLAUDE_CODE_ENTRYPOINT"),
                 HostSessionId = Environment.GetEnvironmentVariable("CLAUDE_CODE_HOST_SESSION_ID"),
+                // Lets "Open window" find the session's window; a Toolhelp snapshot takes a few ms.
+                ClaudePid = ProcessTree.FindAncestor(Environment.ProcessId, n => n.StartsWith("claude", StringComparison.OrdinalIgnoreCase)),
             };
 
             using var client = new DaemonClient();

@@ -201,6 +201,19 @@ public class AgentRegistryTests
     }
 
     [Fact]
+    public void ProcessFor_KeptFromLatestEvent_NotInDto()
+    {
+        _reg.Apply(Ev("SessionStart") with { ClaudePid = 4242 });
+        _reg.Apply(Ev("PostToolUse", tool: "Bash"));
+        Assert.Equal(4242, _reg.ProcessFor("s1"));
+        var json = JsonSerializer.Serialize(_reg.Snapshot(), Protocol.Json);
+        Assert.DoesNotContain("4242", json);
+        Assert.DoesNotContain("claudePid", json);
+        _reg.Apply(Ev("SessionEnd"));
+        Assert.Null(_reg.ProcessFor("s1"));
+    }
+
+    [Fact]
     public void Token_NeverInDto()
     {
         _reg.Apply(Ev("SessionStart", socket: @"\\.\pipe\x", token: "secret-token-123"));

@@ -19,6 +19,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     private readonly Dictionary<string, AgentSessionDto> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Socket, string Token)> _inboxes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _ended = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _pids = new(StringComparer.Ordinal);
 
     public event Action<AgentSessionDto>? Changed;
     public event Action<string>? Ended;
@@ -35,6 +36,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
             {
                 ended = _sessions.Remove(e.SessionId);
                 _inboxes.Remove(e.SessionId);
+                _pids.Remove(e.SessionId);
                 _ended[e.SessionId] = now;
             }
             else if (e.Kind != "SessionStart" && _ended.TryGetValue(e.SessionId, out var endedAt) && now - endedAt < EndedGrace)
@@ -46,6 +48,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
                 _ended.Remove(e.SessionId);
                 if (!string.IsNullOrEmpty(e.Socket) && !string.IsNullOrEmpty(e.Token))
                     _inboxes[e.SessionId] = (e.Socket, e.Token);
+                if (e.ClaudePid is { } pid) _pids[e.SessionId] = pid;
                 var current = _sessions.GetValueOrDefault(e.SessionId) ?? Create(e, now);
                 updated = Next(current, e) with
                 {
@@ -76,6 +79,12 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     public (string Socket, string Token)? InboxFor(string sessionId)
     {
         lock (_gate) return _inboxes.TryGetValue(sessionId, out var inbox) ? inbox : null;
+    }
+
+    /// <summary>The session's Claude process id, from its latest event that carried one.</summary>
+    public int? ProcessFor(string sessionId)
+    {
+        lock (_gate) return _pids.TryGetValue(sessionId, out var pid) ? pid : null;
     }
 
     /// <summary>Replaces the session's permission prompts; any prompt makes the session wait on the user.</summary>
@@ -120,6 +129,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
             {
                 _sessions.Remove(id);
                 _inboxes.Remove(id);
+                _pids.Remove(id);
             }
         }
         foreach (var id in removed) Ended?.Invoke(id);

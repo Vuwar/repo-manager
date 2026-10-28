@@ -307,6 +307,17 @@ public static class Api
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
 
+        api.MapPost("/town/open", (TownOpenRequest req) =>
+        {
+            if (string.IsNullOrEmpty(req.SessionId) || d.Agents.Get(req.SessionId) is not { } session) return ActionResultDto.Fail("unknown session");
+            if (session.Surface == "desktop" && WindowActivator.DesktopLink(session.HostSessionId) is { } link && WindowActivator.OpenLink(link))
+                return ActionResultDto.Success("opened in Claude");
+            if (d.Agents.ProcessFor(req.SessionId) is not { } pid)
+                return ActionResultDto.Fail("RepoManager does not know this session's window yet; it learns it on the session's next event");
+            var (ok, message) = WindowActivator.Activate(pid);
+            return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
+        });
+
         api.MapPost("/town/focus", (TownFocusRequest req) =>
         {
             d.Permissions.SetFocused(req.Focused);
