@@ -18,6 +18,9 @@ public sealed class MainForm : Form
     private bool _wantTopmost;
     private Rectangle? _fullBounds;
     private Rectangle? _miniBounds;
+    // Town mode: maximised (F11: borderless full screen); leaving restores what was there before.
+    private bool _town;
+    private (Rectangle Bounds, FormWindowState State)? _beforeTown;
     private static readonly Size FullMinimum = new(800, 500);
     private static readonly Color FullBack = Color.FromArgb(0x16, 0x18, 0x1d);
 
@@ -100,7 +103,10 @@ public sealed class MainForm : Form
             switch (root.GetProperty("type").GetString())
             {
                 case "mode":
-                    SetMini(root.GetProperty("mode").GetString() == "mini");
+                    SetMode(root.GetProperty("mode").GetString() ?? "");
+                    break;
+                case "fullscreen":
+                    ToggleFullScreen();
                     break;
                 case "topmost":
                     // Can arrive before the mode message; it applies once the window is compact.
@@ -126,6 +132,45 @@ public sealed class MainForm : Form
         {
             // Unknown message shape: ignore.
         }
+    }
+
+    private void SetMode(string mode)
+    {
+        // Leave the town first, so town and compact bounds never mix.
+        if (mode != "town") SetTown(false);
+        SetMini(mode == "mini");
+        if (mode == "town") SetTown(true);
+    }
+
+    private void SetTown(bool town)
+    {
+        if (town == _town) return;
+        _town = town;
+        if (town)
+        {
+            _beforeTown = (WindowState == FormWindowState.Normal ? Bounds : RestoreBounds, WindowState);
+            WindowState = FormWindowState.Maximized;
+            return;
+        }
+        FormBorderStyle = FormBorderStyle.Sizable;
+        if (_beforeTown is { } before)
+        {
+            WindowState = FormWindowState.Normal;
+            Bounds = before.Bounds;
+            WindowState = before.State == FormWindowState.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+        }
+        _beforeTown = null;
+    }
+
+    /// <summary>Town only: borderless and maximised (covers the taskbar), or back to a normal maximised window.</summary>
+    private void ToggleFullScreen()
+    {
+        if (!_town) return;
+        var full = FormBorderStyle == FormBorderStyle.None;
+        // Changing the border of a maximised window does not resize it; go through Normal.
+        WindowState = FormWindowState.Normal;
+        FormBorderStyle = full ? FormBorderStyle.Sizable : FormBorderStyle.None;
+        WindowState = FormWindowState.Maximized;
     }
 
     private void SetMini(bool mini)
