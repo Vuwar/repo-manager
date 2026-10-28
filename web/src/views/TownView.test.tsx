@@ -70,6 +70,26 @@ describe('TownView', () => {
     expect(screen.getByRole('button', { name: /^← \d need you$/ })).toBeTruthy();
   });
 
+  it('edge arrows still work when a press on them would start a drag', () => {
+    const capture = vi.fn();
+    HTMLElement.prototype.setPointerCapture = capture;
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    const waiting = Array.from({ length: 7 }, (_, i) => agent('w' + i, { project: 'p' + String(i + 10), state: 'waiting' }));
+    setup(projects, [...waiting, agent('x', { project: 'p39', state: 'working' })]);
+    const arrow = screen.getByRole('button', { name: '1 working →' });
+    fireEvent.pointerDown(arrow, { button: 0, pointerId: 1 });
+    expect(capture).not.toHaveBeenCalled();
+    fireEvent.pointerDown(document.querySelector('.town-stage')!, { button: 0, pointerId: 1 });
+    expect(capture).toHaveBeenCalled();
+  });
+
+  it('keeps holding the order while the pointer is on the minimap', () => {
+    setup();
+    fireEvent.pointerEnter(document.querySelector('.town-minimap')!);
+    act(() => dispatch({ type: 'agent', agent: agent('1', { project: 'gamma', state: 'waiting' }) }));
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
   it('has one minimap dot per lot; clicking one jumps there', () => {
     const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
     setup(projects);

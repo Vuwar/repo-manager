@@ -54,6 +54,21 @@ describe('window title', () => {
     sessionStorage.clear();
   });
 
+  it('reloads the session list every 30 s while visible', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', (url: string) => {
+      calls.push(String(url));
+      return String(url).startsWith('/api/events') ? new Promise(() => {}) : Promise.resolve(new Response('[]', { status: 200 }));
+    });
+    render(<App />);
+    const sessions = () => calls.filter((u) => u.startsWith('/api/town/sessions')).length;
+    const before = sessions();
+    await act(async () => void vi.advanceTimersByTime(30_000));
+    expect(sessions()).toBeGreaterThan(before);
+    vi.useRealTimers();
+  });
+
   it('shows the needs-you count', async () => {
     const { dispatch } = await import('./state/store');
     const { agent } = await import('./test/fixtures');

@@ -81,8 +81,11 @@ function Shell({ token }: { token: string }) {
     void loadProjects();
     void loadDaemonInfo();
     void loadAgents();
+    // Agents too: an event lost while the stream reopens would otherwise leave a ghost worker and a stale "(N)".
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible') void loadProjects();
+      if (document.visibilityState !== 'visible') return;
+      void loadProjects();
+      void loadAgents();
     }, 30_000);
     const onVis = () => document.visibilityState === 'visible' && void loadProjects();
     document.addEventListener('visibilitychange', onVis);
@@ -100,11 +103,11 @@ function Shell({ token }: { token: string }) {
       onEvent: handleEvent,
       onOpen: (reconnected) => {
         dispatch({ type: 'connection', state: 'open' });
+        // Every (re)open may have missed agent events, also when the stream reopens for new log sources.
+        void loadAgents();
         if (reconnected) {
           void loadProjects();
           void loadDaemonInfo();
-          // Replaces the list, so sessions that ended while the stream was down disappear.
-          void loadAgents();
           for (const s of sourcesKey ? sourcesKey.split(',') : []) void loadLogHistory(s);
         }
       },

@@ -179,8 +179,10 @@ export class TownScene {
     }
   }
 
-  draw(ctx: Draw2D, f: TownFrame): void {
+  draw(ctx: Draw2D, frame: TownFrame): void {
     this.ctx = ctx;
+    // Reduced motion: a frozen clock, so nothing blinks, twinkles or drifts.
+    const f = frame.reducedMotion ? { ...frame, now: 0 } : frame;
     const phase = f.reducedMotion ? 0.42 : f.phase;
     const L = 0.5 + 0.5 * Math.sin(2 * Math.PI * phase);
     const night = (1 - L) * 0.62;

@@ -107,7 +107,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
   // Drag to pan.
   const drag = useRef<{ x: number; cam: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    // A press on a button (edge arrow) must stay a click: capturing would retarget it to the stage.
+    if (e.button !== 0 || (e.target as Element).closest('button')) return;
     drag.current = { x: e.clientX, cam: camX };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
@@ -121,7 +122,6 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     setHovering(true);
   };
   const onPointerLeave = () => {
-    drag.current = null;
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
     leaveTimer.current = setTimeout(() => setHovering(false), RESORT_DELAY_MS);
   };
@@ -163,7 +163,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
   const toPx = (x: number) => (x - camX) * scale;
 
   return (
-    <div className="town">
+    // Hover covers the stage and the minimap, so dots do not re-sort under the pointer.
+    <div className="town" onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave}>
       <header className="town-bar">
         <span className="town-title">Agent Town</span>
         <span className="town-counts">{countsText(lots)}</span>
@@ -177,8 +178,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerEnter={onPointerEnter}
-        onPointerLeave={onPointerLeave}
+        onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onWheel={(e) => pan((e.deltaY + e.deltaX) * WHEEL_FACTOR)}
       >
         <canvas ref={canvasRef} className="town-canvas" aria-hidden="true" />

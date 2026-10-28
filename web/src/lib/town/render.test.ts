@@ -78,6 +78,20 @@ describe('TownScene', () => {
     expect(calm.particleCount()).toBe(0);
   });
 
+  it('does not blink with reduced motion', () => {
+    const lots = [lot(0, { group: 'failed', workers: [agent('s1', { state: 'failed' })] }), lot(1, { group: 'waiting', workers: [agent('s2', { state: 'waiting' })] })];
+    const colours = (now: number) => {
+      const scene = new TownScene(true);
+      scene.update(lots, 0.016, 0);
+      const seen: string[] = [];
+      const { ctx } = fakeCtx();
+      const rec = new Proxy(ctx, { set: (t, k, v) => ((k === 'fillStyle' && seen.push(String(v)), ((t as Record<string, unknown>)[k as string] = v)), true) });
+      scene.draw(rec, frame(lots, 0, { now, reducedMotion: true }));
+      return seen.join(',');
+    };
+    expect(colours(1000)).toBe(colours(1137));
+  });
+
   it('keeps a building palette by lot key', () => {
     expect(paletteFor('project:kodex')).toBe(paletteFor('project:kodex'));
     for (const k of ['a', 'b', 'project:x', 'folder:c:\\t']) {
