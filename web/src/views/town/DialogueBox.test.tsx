@@ -52,10 +52,19 @@ describe('DialogueBox', () => {
   });
 
   it("done shows Claude's last message unchanged", () => {
-    const reply = 'All done.\n\n- fixed `a`\n- fixed b';
+    const reply = 'All done.\nNothing else to report.';
     show(agent('a', { state: 'done', lastReply: reply }));
     fireEvent.keyDown(window, { key: ' ' });
     expect(text()).toBe(reply);
+  });
+
+  it("formats Claude's Markdown", () => {
+    show(agent('a', { state: 'done', lastReply: 'All **done**.\n\n- fixed `a`\n- fixed b' }));
+    fireEvent.keyDown(window, { key: ' ' });
+    const box = document.querySelector('.dlg-text')!;
+    expect(box.querySelector('strong')?.textContent).toBe('done');
+    expect([...box.querySelectorAll('li')].map((l) => l.textContent)).toEqual(['fixed a', 'fixed b']);
+    expect(box.querySelector('code')?.textContent).toBe('a');
   });
 
   it('permission menu: arrows and Enter send allow with always', async () => {

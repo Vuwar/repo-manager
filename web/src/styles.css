@@ -3648,3 +3648,38 @@ details.advanced[open] {
   padding: 10px;
   color: #98a1cf;
 }
+
+.dlg-text .md p,
+.dlg-text .md ul,
+.dlg-text .md ol,
+.dlg-text .md pre {
+  margin: 0 0 6px;
+}
+.dlg-text .md ul,
+.dlg-text .md ol {
+  padding-left: 20px;
+}
+.dlg-text .md-h {
+  margin: 4px 0;
+  font-weight: bold;
+  color: #ffc857;
+}
+.dlg-text .md strong {
+  color: #fff;
+}
+.dlg-text .md code,
+.dlg-text .md pre {
+  font: inherit;
+  background: #232a55;
+  border-radius: 2px;
+}
+.dlg-text .md code {
+  padding: 0 3px;
+}
+.dlg-text .md pre {
+  padding: 6px 8px;
+  white-space: pre-wrap;
+}
+.dlg-text .md-link {
+  text-decoration: underline dotted;
+}

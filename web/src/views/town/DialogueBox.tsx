@@ -6,6 +6,7 @@ import { waitText } from '../../lib/town/quests';
 import { drawPortrait, STATE_COLOR } from '../../lib/town/render';
 import { useNow } from '../../lib/useNow';
 import { useAppState } from '../../state/store';
+import { Markdown } from './Markdown';
 
 /** Characters per second while the text types out. */
 const TYPE_CPS = 40;
@@ -132,7 +133,9 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
           {d.nameTag}
         </span>
         <span className="dlg-wait">⏳ {waitText(now - Date.parse(session.since))}</span>
-        <div className="dlg-text">{d.text.slice(0, shown)}</div>
+        <div className="dlg-text">
+          <Markdown text={d.text.slice(0, shown)} />
+        </div>
         {done && <span className="dlg-more">▼</span>}
         {answered && <div className="dlg-note">{answered}</div>}
         {d.canSend && (
