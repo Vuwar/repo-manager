@@ -40,6 +40,8 @@ export interface AppState {
   configRequests: number;
   /** Claude Code sessions on this machine, by session id. */
   agents: Record<string, AgentSessionDto>;
+  /** Recent status messages per session ("Used Bash"), oldest first; the dialogue box shows them while working. */
+  agentLog: Record<string, string[]>;
 }
 
 export type Action =
@@ -80,6 +82,7 @@ export function initialState(persistedInstance?: string | null): AppState {
     toasts: [],
     configRequests: 0,
     agents: {},
+    agentLog: {},
   };
 }
 
@@ -137,6 +140,15 @@ function mapInstances(projects: ProjectDto[], fn: (i: InstanceDto) => InstanceDt
 
 function cap(lines: LogLineDto[]): LogLineDto[] {
   return lines.length > MAX_LOG_LINES ? lines.slice(lines.length - MAX_LOG_LINES) : lines;
+}
+
+const AGENT_LOG_MAX = 5;
+
+/** Appends a status message unless it repeats the last one; keeps the newest AGENT_LOG_MAX. */
+function logWith(log: string[] | undefined, message: string): string[] {
+  const list = log ?? [];
+  if (!message || list[list.length - 1] === message) return list;
+  return [...list, message].slice(-AGENT_LOG_MAX);
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -236,13 +248,20 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'dismissToast':
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
     case 'agentsLoaded':
-      return { ...state, agents: Object.fromEntries(action.agents.map((a) => [a.id, a])) };
-    case 'agent':
-      return { ...state, agents: { ...state.agents, [action.agent.id]: action.agent } };
+      return {
+        ...state,
+        agents: Object.fromEntries(action.agents.map((a) => [a.id, a])),
+        agentLog: Object.fromEntries(action.agents.map((a) => [a.id, logWith(state.agentLog[a.id], a.message)])),
+      };
+    case 'agent': {
+      const a = action.agent;
+      return { ...state, agents: { ...state.agents, [a.id]: a }, agentLog: { ...state.agentLog, [a.id]: logWith(state.agentLog[a.id], a.message) } };
+    }
     case 'agentEnd': {
       if (!(action.id in state.agents)) return state;
       const { [action.id]: _ended, ...agents } = state.agents;
-      return { ...state, agents };
+      const { [action.id]: _log, ...agentLog } = state.agentLog;
+      return { ...state, agents, agentLog };
     }
     case 'authFailed':
       return { ...state, authFailed: true };

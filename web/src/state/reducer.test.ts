@@ -130,3 +130,16 @@ describe('agents', () => {
     expect(reducer(s, { type: 'agentEnd', id: 'nope' })).toBe(s);
   });
 });
+
+describe('agentLog', () => {
+  it('keeps the last 5 distinct messages, oldest first, and drops them with the session', () => {
+    let s = reducer(initialState(), { type: 'agentsLoaded', agents: [agent('a', { message: 'Session started' })] });
+    expect(s.agentLog.a).toEqual(['Session started']);
+    for (const m of ['Used Read', 'Used Read', 'Used Bash', 'Used Edit', 'Used Grep', 'Used Bash']) {
+      s = reducer(s, { type: 'agent', agent: agent('a', { message: m }) });
+    }
+    expect(s.agentLog.a).toEqual(['Used Read', 'Used Bash', 'Used Edit', 'Used Grep', 'Used Bash']);
+    s = reducer(s, { type: 'agentEnd', id: 'a' });
+    expect(s.agentLog.a).toBeUndefined();
+  });
+});
