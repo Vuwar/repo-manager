@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { postFullscreen } from '../lib/host';
-import { startFocusReporting } from '../lib/town/focus';
+import { inOrder, startFocusReporting } from '../lib/town/focus';
 import { questsFor } from '../lib/town/quests';
 import { useNow } from '../lib/useNow';
 import { DialogueBox } from './town/DialogueBox';
@@ -101,7 +101,9 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
   const [seen, setSeen] = useState<Record<string, string>>({});
   const [questsOpen, setQuestsOpen] = useState(false);
   const now = useNow();
-  useEffect(() => startFocusReporting((f) => void api.townFocus(f)), []);
+  // In order: a late "true" overtaking a "false" would hold prompts for up to the 15 s lease.
+  useEffect(() => startFocusReporting(inOrder((f) => api.townFocus(f))), []);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const openSession = open ? agents[open] : undefined;
   const openLot = openSession ? lots.find((l) => l.workers.some((w) => w.id === openSession.id)) : undefined;
   useEffect(() => {
@@ -117,11 +119,12 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
     setOpen(id);
   };
   /** Next worker that needs the user, in street order, after the open one. */
-  const nextWaiting = () => {
+  const nextWaiting = (): boolean => {
     const waiting = lots.flatMap((l) => l.workers).filter((w) => w.state === 'waiting');
-    if (!waiting.length) return;
+    if (!waiting.length) return false;
     const at = waiting.findIndex((w) => w.id === open);
     talkTo(waiting[(at + 1) % waiting.length].id);
+    return true;
   };
 
   // Keys: arrows pan, Home re-sorts and goes to the left end, F11 toggles full screen, Tab and Q talk.
@@ -136,7 +139,10 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
       else if (e.key === 'ArrowRight' && !k.boxOpen) k.pan(ARROW_PAN);
       else if (e.key === 'Home') k.home();
       else if (e.key === 'F11') postFullscreen();
-      else if (e.key === 'Tab') k.nextWaiting();
+      // Tab stays normal keyboard navigation when nobody needs the user.
+      else if (e.key === 'Tab') {
+        if (!k.nextWaiting()) return;
+      }
       else if (e.key === 'q' || e.key === 'Q') setQuestsOpen((q) => !q);
       else if (e.key === 'Escape' && k.questsOpen) setQuestsOpen(false);
       else return;
@@ -290,6 +296,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
           lotName={openLot.name}
           index={openLot.workers.findIndex((w) => w.id === openSession.id)}
           onClose={() => setOpen(null)}
+          draft={drafts[openSession.id] ?? ''}
+          onDraft={(text) => setDrafts((d) => ({ ...d, [openSession.id]: text }))}
         />
       )}
       {questsOpen && <QuestLog quests={questsFor(lots, seen)} now={now} onOpen={talkTo} onClose={() => setQuestsOpen(false)} />}

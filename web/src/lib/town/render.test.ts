@@ -120,6 +120,11 @@ describe('workerAt', () => {
     expect(workerAt(lots, x, y)).toMatchObject({ lot: 1, index: 0 });
   });
 
+  it('finds a finished worker in the middle of its jump', () => {
+    const [x, y] = workerSpot(1, 0, 'waiting');
+    expect(workerAt(lots, x, y - 30)?.session.id).toBe('c');
+  });
+
   it('finds nothing between workers', () => {
     expect(workerAt(lots, 2, 10)).toBeNull();
     expect(workerAt(lots, 48, 165)).toBeNull();

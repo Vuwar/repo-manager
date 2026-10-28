@@ -27,7 +27,17 @@ function isTypingTarget(el: EventTarget | null): boolean {
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** RPG dialogue box for one session: what it says, its permission menu or a message line, and "Open window". */
-export function DialogueBox({ session, lotName, index, onClose }: { session: AgentSessionDto; lotName: string; index: number; onClose: () => void }) {
+interface Props {
+  session: AgentSessionDto;
+  lotName: string;
+  index: number;
+  onClose: () => void;
+  /** The typed message, kept by the town so it survives the box closing (quest log, Esc). */
+  draft?: string;
+  onDraft?: (text: string) => void;
+}
+
+export function DialogueBox({ session, lotName, index, onClose, draft: keptDraft, onDraft }: Props) {
   const log = useAppState((s) => s.agentLog[session.id] ?? NO_LOG);
   const d = dialogueFor(session, lotName, index, log);
   const now = useNow();
@@ -55,18 +65,25 @@ export function DialogueBox({ session, lotName, index, onClose }: { session: Age
   useEffect(() => {
     setChoice(0);
     setAnswered(null);
+    picking.current = false;
   }, [requestId]);
   const menu = d.kind === 'permission' && !answered;
+  const picking = useRef(false);
   const pick = async (i: number) => {
-    if (!d.prompt) return;
+    // One answer per prompt: a double click or Enter while the first answer travels sends nothing.
+    if (!d.prompt || picking.current) return;
+    picking.current = true;
     const c = CHOICES[i];
     setAnswered('Answering…');
     const r = await api.townAnswer(d.prompt.requestId, c.behavior, c.always);
-    setAnswered(r.ok ? `${c.label}.` : 'Already answered in the window.');
+    const late = !r.ok && (r.error ?? '').includes('no longer waiting');
+    setAnswered(r.ok ? `${c.label}.` : late ? 'Already answered in the window.' : (r.error ?? 'Could not answer.'));
   };
 
   // Message line.
-  const [draft, setDraft] = useState('');
+  const [localDraft, setLocalDraft] = useState('');
+  const draft = keptDraft ?? localDraft;
+  const setDraft = onDraft ?? setLocalDraft;
   const [sending, setSending] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);

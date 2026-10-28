@@ -242,12 +242,28 @@ describe('TownView', () => {
       expect(document.querySelector('.dlg-text')!.textContent).toBe('I asked in my window: npm i. Answer it there.');
     });
 
-    it('reports focus while mounted', () => {
+    it('Tab is left to the page when nobody needs you', () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'working' })]);
+      expect(fireEvent.keyDown(window, { key: 'Tab' })).toBe(true);
+      expect(dialog()).toBeNull();
+    });
+
+    it('the quest log does not lose a half-typed message', () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'done', canSend: true })]);
+      clickWorker(0, 0, 'done');
+      fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'half typed' } });
+      fireEvent.keyDown(window, { key: 'q' });
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('half typed');
+    });
+
+    it('reports focus while mounted', async () => {
       vi.spyOn(document, 'hasFocus').mockReturnValue(true);
       api.townFocus.mockClear();
       setup();
       expect(api.townFocus).toHaveBeenLastCalledWith(true);
       cleanup();
+      await act(async () => void (await new Promise((r) => setTimeout(r, 0))));
       expect(api.townFocus).toHaveBeenLastCalledWith(false);
     });
   });

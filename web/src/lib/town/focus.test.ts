@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FOCUS_HEARTBEAT_MS, startFocusReporting } from './focus';
+import { FOCUS_HEARTBEAT_MS, inOrder, startFocusReporting } from './focus';
 
 let focused = true;
 let visibility: DocumentVisibilityState = 'visible';
@@ -88,5 +88,30 @@ describe('startFocusReporting', () => {
     expect(post).toHaveBeenLastCalledWith(false);
     stop();
     delete (window as unknown as { chrome?: unknown }).chrome;
+  });
+});
+
+describe('inOrder', () => {
+  it('sends the next report only after the previous one finished', async () => {
+    const done: (() => void)[] = [];
+    const send = vi.fn(() => new Promise<void>((r) => done.push(r)));
+    const post = inOrder(send);
+    post(true);
+    post(false);
+    expect(send.mock.calls).toEqual([[true]]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(send.mock.calls).toEqual([[true]]);
+    done[0]();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(send.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('keeps going after a failed report', async () => {
+    const send = vi.fn().mockRejectedValueOnce(new Error('down')).mockResolvedValue(undefined);
+    const post = inOrder(send);
+    post(true);
+    post(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(send.mock.calls).toEqual([[true], [false]]);
   });
 });

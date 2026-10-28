@@ -81,8 +81,27 @@ describe('DialogueBox', () => {
     expect(api.townAnswer).toHaveBeenCalledWith('r1', 'deny', false);
   });
 
+  it('a second pick while the first is on its way sends nothing', async () => {
+    let finish: (v: typeof ok) => void = () => {};
+    api.townAnswer.mockReturnValue(new Promise((r) => (finish = r)));
+    show(agent('a', { state: 'waiting', prompts: [{ requestId: 'r1', toolName: 'Bash', summary: 'npm i', answerable: true }] }));
+    const go = screen.getByRole('menuitem', { name: 'Go ahead' });
+    fireEvent.click(go);
+    fireEvent.click(go);
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await act(async () => finish(ok));
+    expect(api.townAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it('other answer failures show their own message', async () => {
+    api.townAnswer.mockResolvedValue({ ok: false, error: 'RepoManager is not reachable', affected: [], logTail: [] });
+    show(agent('a', { state: 'waiting', prompts: [{ requestId: 'r1', toolName: 'Bash', summary: 'npm i', answerable: true }] }));
+    await act(async () => void fireEvent.keyDown(window, { key: 'Enter' }));
+    expect(screen.getByText('RepoManager is not reachable')).toBeTruthy();
+  });
+
   it('an answer that comes too late says so and hides the menu', async () => {
-    api.townAnswer.mockResolvedValue({ ok: false, error: 'that prompt is no longer waiting', affected: [], logTail: [] });
+    api.townAnswer.mockResolvedValue({ ok: false, error: 'that prompt is no longer waiting; answer it in the session window', affected: [], logTail: [] });
     show(agent('a', { state: 'waiting', prompts: [{ requestId: 'r1', toolName: 'Bash', summary: 'npm i', answerable: true }] }));
     await act(async () => void fireEvent.keyDown(window, { key: 'Enter' }));
     expect(screen.getByText('Already answered in the window.')).toBeTruthy();

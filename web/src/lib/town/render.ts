@@ -485,7 +485,7 @@ export function workerAt(lots: Lot[], worldX: number, worldY: number): { lot: nu
   lots.forEach((lot, i) =>
     lot.workers.slice(0, MAX_WORKERS).forEach((session, k) => {
       const [x, y] = workerSpot(i, k, session.state);
-      if (worldX < x - 5 || worldX > x + 5 || worldY < y - 26 || worldY > y + 2) return;
+      if (worldX < x - 5 || worldX > x + 5 || worldY < y - 31 || worldY > y + 2) return;
       if (!best || y > best.y) best = { lot: i, index: k, session, y };
     }),
   );
