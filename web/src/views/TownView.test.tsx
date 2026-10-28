@@ -41,6 +41,15 @@ describe('TownView', () => {
     expect(labels()).toEqual(['gamma', 'alpha', 'beta']);
   });
 
+  it('puts labels below the road, as wide as a lot', () => {
+    setup();
+    const label = document.querySelector('.town-label') as HTMLElement;
+    // zoom 3: the road ends at y 168
+    expect(parseFloat(label.style.top)).toBeGreaterThanOrEqual(168 * 3);
+    const name = document.querySelector('.town-lot-name') as HTMLElement;
+    expect(name.style.maxWidth).toBe(`${(51 - 4) * 3}px`);
+  });
+
   it('marks temporary lots', () => {
     setup([], [agent('1', { folder: 'tool', cwd: 'C:\\x\\tool', state: 'working' })]);
     expect(screen.getByText('not in RepoManager')).toBeTruthy();

@@ -295,6 +295,8 @@ export class TownScene {
     this.R(x0, 134, w, 46, this.C('#5ea24f')); this.R(x0, 134, w, 2, this.C('#7bc35f'));
     this.R(x0, 152, w, 16, this.C('#c9a870')); this.R(x0, 152, w, 1, this.C('#a98a54'));
     this.R(x0, 167, w, 1, this.C('#a98a54')); this.R(x0, 168, w, 1, this.C('#4d8c42'));
+    // Grass continues below the scene: the integer zoom leaves up to one zoom step of canvas under it.
+    this.R(x0, SCENE_H, w, SCENE_H * 4, this.C('#5ea24f'));
     for (let base = x0 - (x0 % TILE); base < x1; base += TILE) {
       for (const s of specks) this.R(base + s.x, s.y, 1, 1, this.C(s.c));
       for (const s of roadSpecks) this.R(base + s.x, s.y, 1, 1, this.C(s.c));

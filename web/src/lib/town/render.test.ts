@@ -6,12 +6,12 @@ import type { Lot } from './street';
 
 /** Records draw calls; fillRect x is recorded in screen space (after the current translate). */
 function fakeCtx() {
-  const calls = { fillRect: [] as [number, number][], translate: [] as [number, number][] };
+  const calls = { fillRect: [] as [number, number, number, number][], translate: [] as [number, number][] };
   let tx = 0;
   const ctx: Draw2D = {
     fillStyle: '',
     globalAlpha: 1,
-    fillRect: (x: number, y: number) => void calls.fillRect.push([x + tx, y]),
+    fillRect: (x: number, y: number, w: number, h: number) => void calls.fillRect.push([x + tx, y, w, h]),
     clearRect: () => {},
     save: () => {},
     restore: () => {},
@@ -55,6 +55,12 @@ describe('TownScene', () => {
     const maxX = Math.max(...calls.fillRect.map(([x]) => x));
     // fillRect x is screen space here; nothing far past the right edge of the view
     expect(maxX).toBeLessThan(320 + SLOT_W);
+  });
+
+  it('fills grass below the road far past the scene, so a tall window has no empty band', () => {
+    const { ctx, calls } = fakeCtx();
+    new TownScene(false).draw(ctx, frame([lot(0)], 0));
+    expect(calls.fillRect.some(([, y, , h]) => y >= 168 && y + h >= 600)).toBe(true);
   });
 
   it('translates by the camera', () => {

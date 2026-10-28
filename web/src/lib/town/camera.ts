@@ -7,6 +7,8 @@ export const SLOT0 = 12;
 export const SLOT_W = 51;
 export const BW = 40;
 export const SMALL_BW = 28;
+/** Lot labels sit on the grass below the road, clear of the workers. */
+export const LABEL_Y = 171;
 
 /** Logical pixels per arrow-key press, and per wheel delta unit. */
 export const ARROW_PAN = 24;

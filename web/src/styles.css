@@ -3330,7 +3330,6 @@ details.advanced[open] {
   pointer-events: none;
 }
 .town-lot-name {
-  max-width: 12ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

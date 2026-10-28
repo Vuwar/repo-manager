@@ -7,9 +7,10 @@ import {
   clampCamera,
   edgeHints,
   edgeText,
-  GROUND,
+  LABEL_Y,
   lotX,
   scaleFor,
+  SLOT_W,
   visibleRange,
   WHEEL_FACTOR,
   worldWidth,
@@ -187,8 +188,8 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
           <div className="town-empty">No projects yet. Add a repo in RepoManager, or start Claude Code in any folder.</div>
         )}
         {visible.map(({ lot, i }) => (
-          <div key={lot.key} className="town-label" style={{ left: toPx(lotX(i) + BW / 2), top: (GROUND + 2) * scale }}>
-            <span className="town-lot-name" style={{ ['--c' as string]: swatch(lot.group) }}>
+          <div key={lot.key} className="town-label" style={{ left: toPx(lotX(i) + BW / 2), top: LABEL_Y * scale }}>
+            <span className="town-lot-name" style={{ ['--c' as string]: swatch(lot.group), maxWidth: (SLOT_W - 4) * scale }}>
               {lot.name}
             </span>
             {lot.temporary && <span className="town-lot-note">not in RepoManager</span>}
