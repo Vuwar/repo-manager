@@ -303,7 +303,8 @@ public static class Api
         {
             if (d.Agents.Get(req.SessionId) == null) return ActionResultDto.Fail("unknown session");
             if (d.Agents.InboxFor(req.SessionId) is not { } inbox) return ActionResultDto.Fail("this session has no inbox; open its window");
-            var (ok, message) = await AgentInbox.SendAsync(inbox.Socket, inbox.Token, req.Text, ctx.RequestAborted);
+            if (string.IsNullOrWhiteSpace(req.Text)) return ActionResultDto.Fail("message is empty");
+            var (ok, message) = await AgentInbox.SendAsync(inbox.Socket, inbox.Token, AgentInbox.FromTownUser(req.Text), ctx.RequestAborted);
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
 

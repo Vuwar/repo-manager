@@ -193,7 +193,10 @@ public class TownApiTests(DaemonFixture f)
         Assert.True((await Session(id))!.CanSend);
         var r = await f.Post("api/town/send", new TownSendRequest(id, "hello"));
         Assert.True(r.Ok, r.Message);
-        Assert.Contains("\"content\":\"hello\"", await received);
+        // Claude Code shows inbox messages as coming from another session; the first line says it is the user.
+        var content = JsonDocument.Parse((await received).Split('\n')[1]).RootElement.GetProperty("message").GetProperty("content").GetString()!;
+        Assert.StartsWith("[From the user, typed in RepoManager Agent Town", content);
+        Assert.EndsWith("\n\nhello", content);
         await PostHook(HookJson("SessionEnd", id));
     }
 

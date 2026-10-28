@@ -15,6 +15,13 @@ public static class AgentInbox
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    /// <summary>
+    /// Claude Code shows inbox messages as coming from "another Claude session", so a session would answer that
+    /// session instead of the user. The first line says who typed it. It does not grant any permission.
+    /// </summary>
+    public static string FromTownUser(string text) =>
+        "[From the user, typed in RepoManager Agent Town (their view of all sessions). Reply here in this session, as you would to them.]\n\n" + text;
+
     /// <summary>Never throws. The message never contains the token.</summary>
     public static async Task<(bool Ok, string Message)> SendAsync(string pipePath, string token, string text, CancellationToken ct)
     {
