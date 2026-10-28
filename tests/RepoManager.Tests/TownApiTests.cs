@@ -210,6 +210,20 @@ public class TownApiTests(DaemonFixture f)
         var r = await f.Post("api/town/open", new TownOpenRequest(id));
         Assert.False(r.Ok);
         Assert.Contains("window", r.Error ?? r.Message);
+        Assert.DoesNotContain("next event", r.Error ?? r.Message);
+        await PostHook(HookJson("SessionEnd", id));
+    }
+
+    [Fact]
+    public async Task Open_ProcessGone_NeverActivatesAReusedPid()
+    {
+        var id = NewId();
+        using var child = Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 0") { UseShellExecute = false, CreateNoWindow = true })!;
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", id), Entrypoint = "cli", ClaudePid = child.Id });
+        await child.WaitForExitAsync();
+        var r = await f.Post("api/town/open", new TownOpenRequest(id));
+        Assert.False(r.Ok);
+        Assert.Contains("no longer running", r.Error ?? r.Message);
         await PostHook(HookJson("SessionEnd", id));
     }
 

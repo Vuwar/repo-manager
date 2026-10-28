@@ -96,6 +96,21 @@ public class PermissionBrokerTests
     }
 
     [Fact]
+    public async Task FocusLease_TimerFiringEarly_StillEndsTheLease()
+    {
+        // The timer can fire a few ms before the coarse tick clock reaches the lease end.
+        long now = 1000;
+        var broker = new PermissionBroker(TimeSpan.FromMilliseconds(100), () => now);
+        broker.SetFocused(true);
+        now = 1050;
+        await Task.Delay(300); // the real timer fires here and sees "not yet"
+        Assert.True(broker.Focused);
+        now = 1200;
+        for (var i = 0; i < 100 && broker.Focused; i++) await Task.Delay(20);
+        Assert.False(broker.Focused);
+    }
+
+    [Fact]
     public async Task FocusLease_Renewed_KeepsWaiting()
     {
         var broker = new PermissionBroker(TimeSpan.FromMilliseconds(300));

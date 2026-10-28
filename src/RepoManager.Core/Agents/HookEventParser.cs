@@ -19,7 +19,8 @@ public sealed record AgentHookEvent(
     string? Token,
     string Surface,
     string? HostSessionId,
-    int? ClaudePid = null);
+    int? ClaudePid = null,
+    DateTime? ClaudeStarted = null);
 
 public static class HookEventParser
 {

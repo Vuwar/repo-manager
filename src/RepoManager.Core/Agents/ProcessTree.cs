@@ -68,6 +68,20 @@ public static class ProcessTree
         return list;
     }
 
+    /// <summary>When the process started, or null when it is gone (or not ours to read). Tells a live pid from a reused one.</summary>
+    public static DateTime? StartTime(int pid)
+    {
+        try
+        {
+            using var p = System.Diagnostics.Process.GetProcessById(pid);
+            return p.StartTime;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The nearest ancestor whose exe name matches, or null.</summary>
     public static int? FindAncestor(int pid, Func<string, bool> nameMatches)
     {

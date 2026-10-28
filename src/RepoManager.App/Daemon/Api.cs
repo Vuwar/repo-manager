@@ -268,7 +268,7 @@ public static class Api
         {
             var e = HookEventParser.Parse(env);
             if (e == null) return ActionResultDto.Fail("not a town hook event");
-            d.Agents.Apply(e);
+            d.Agents.Apply(WithProcessStart(e));
             // The session moved on, so a prompt it showed in its own window was answered there. Not on Notification:
             // Claude Code reports the dialog it just opened for that same prompt.
             if (e.Kind is not ("PermissionRequest" or "Notification")) d.Permissions.ClearSession(e.SessionId);
@@ -279,7 +279,7 @@ public static class Api
         {
             var e = HookEventParser.Parse(env);
             if (e is not { Kind: "PermissionRequest" }) return new PermissionDecisionDto(null, false);
-            d.Agents.Apply(e);
+            d.Agents.Apply(WithProcessStart(e));
             var prompt = new PermissionPromptDto
             {
                 RequestId = Guid.NewGuid().ToString("N"),
@@ -313,7 +313,11 @@ public static class Api
             if (session.Surface == "desktop" && WindowActivator.DesktopLink(session.HostSessionId) is { } link && WindowActivator.OpenLink(link))
                 return ActionResultDto.Success("opened in Claude");
             if (d.Agents.ProcessFor(req.SessionId) is not { } pid)
-                return ActionResultDto.Fail("RepoManager does not know this session's window yet; it learns it on the session's next event");
+                return ActionResultDto.Fail("RepoManager could not find this session's window");
+            // A pid of a process that ended may already belong to another program.
+            var started = ProcessTree.StartTime(pid);
+            if (started is null || started != d.Agents.ProcessStarted(req.SessionId))
+                return ActionResultDto.Fail("this session's Claude process is no longer running");
             var (ok, message) = WindowActivator.Activate(pid);
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
@@ -326,6 +330,10 @@ public static class Api
 
         api.MapGet("/town/sessions", () => d.Agents.Snapshot());
     }
+
+    /// <summary>Records when the session's Claude process started, so "Open window" can tell it from a reused pid.</summary>
+    private static AgentHookEvent WithProcessStart(AgentHookEvent e) =>
+        e.ClaudePid is { } pid ? e with { ClaudeStarted = ProcessTree.StartTime(pid) } : e;
 
     /// <summary>The command for shell tools, else the tool name.</summary>
     private static string PermissionSummary(AgentHookEvent e)

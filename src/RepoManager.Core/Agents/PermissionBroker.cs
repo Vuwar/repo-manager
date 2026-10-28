@@ -23,10 +23,14 @@ public sealed class PermissionBroker : IDisposable
     private bool _focused;
     private long _leaseEnds;
 
-    public PermissionBroker(TimeSpan? focusLease = null)
+    private readonly Func<long> _ticks;
+
+    /// <param name="ticks">Millisecond clock; tests pass a fake one.</param>
+    public PermissionBroker(TimeSpan? focusLease = null, Func<long>? ticks = null)
     {
+        _ticks = ticks ?? (() => Environment.TickCount64);
         _focusLease = focusLease ?? DefaultFocusLease;
-        _leaseTimer = new Timer(_ => OnLeaseTimer());
+        _leaseTimer = new Timer(_ => CheckLease());
     }
 
     /// <summary>Raised with the session id whenever that session's prompts change.</summary>
@@ -46,7 +50,7 @@ public sealed class PermissionBroker : IDisposable
             _focused = focused;
             if (focused)
             {
-                _leaseEnds = Environment.TickCount64 + (long)_focusLease.TotalMilliseconds;
+                _leaseEnds = _ticks() + (long)_focusLease.TotalMilliseconds;
                 _leaseTimer.Change(_focusLease, Timeout.InfiniteTimeSpan);
             }
             else
@@ -106,12 +110,19 @@ public sealed class PermissionBroker : IDisposable
         SetFocused(false);
     }
 
-    private void OnLeaseTimer()
+    internal void CheckLease()
     {
         lock (_gate)
         {
-            // A renewal may have raced the timer; only a lease that really ran out ends focus.
-            if (!_focused || Environment.TickCount64 < _leaseEnds) return;
+            if (!_focused) return;
+            // A renewal may have raced the timer, or the timer fired a few ms before the coarse tick clock reached
+            // the lease end: check again when it is due, or focus would never end.
+            var left = _leaseEnds - _ticks();
+            if (left > 0)
+            {
+                _leaseTimer.Change(TimeSpan.FromMilliseconds(left), Timeout.InfiniteTimeSpan);
+                return;
+            }
         }
         SetFocused(false);
     }

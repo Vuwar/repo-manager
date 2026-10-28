@@ -19,7 +19,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     private readonly Dictionary<string, AgentSessionDto> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Socket, string Token)> _inboxes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _ended = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _pids = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int Pid, DateTime? Started)> _pids = new(StringComparer.Ordinal);
 
     public event Action<AgentSessionDto>? Changed;
     public event Action<string>? Ended;
@@ -48,7 +48,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
                 _ended.Remove(e.SessionId);
                 if (!string.IsNullOrEmpty(e.Socket) && !string.IsNullOrEmpty(e.Token))
                     _inboxes[e.SessionId] = (e.Socket, e.Token);
-                if (e.ClaudePid is { } pid) _pids[e.SessionId] = pid;
+                if (e.ClaudePid is { } pid) _pids[e.SessionId] = (pid, e.ClaudeStarted);
                 var current = _sessions.GetValueOrDefault(e.SessionId) ?? Create(e, now);
                 updated = Next(current, e) with
                 {
@@ -84,7 +84,13 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     /// <summary>The session's Claude process id, from its latest event that carried one.</summary>
     public int? ProcessFor(string sessionId)
     {
-        lock (_gate) return _pids.TryGetValue(sessionId, out var pid) ? pid : null;
+        lock (_gate) return _pids.TryGetValue(sessionId, out var p) ? p.Pid : null;
+    }
+
+    /// <summary>When the session's Claude process started, as seen when its pid arrived; null when unknown.</summary>
+    public DateTime? ProcessStarted(string sessionId)
+    {
+        lock (_gate) return _pids.TryGetValue(sessionId, out var p) ? p.Started : null;
     }
 
     /// <summary>Replaces the session's permission prompts; any prompt makes the session wait on the user.</summary>
