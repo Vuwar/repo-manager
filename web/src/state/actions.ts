@@ -52,6 +52,15 @@ export function loadProjects(): Promise<void> {
   return loading;
 }
 
+/** Fetches /api/town/sessions. On failure the town keeps what it has; the next event or reconnect catches up. */
+export async function loadAgents(): Promise<void> {
+  try {
+    dispatch({ type: 'agentsLoaded', agents: (await api.townSessions()) ?? [] });
+  } catch {
+    /* shown via connection state */
+  }
+}
+
 export async function loadDaemonInfo(): Promise<void> {
   try {
     dispatch({ type: 'daemon', info: await api.ping() });
@@ -218,6 +227,12 @@ export function handleEvent(e: EventDto): void {
       break;
     case 'projects':
       void loadProjects();
+      break;
+    case 'agent':
+      if (e.payload) dispatch({ type: 'agent', agent: e.payload });
+      break;
+    case 'agentEnd':
+      if (e.payload) dispatch({ type: 'agentEnd', id: e.payload.id });
       break;
   }
 }

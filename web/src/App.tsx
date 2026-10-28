@@ -8,12 +8,13 @@ import { LogPane } from './components/LogPane';
 import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/Toasts';
 import { Button } from './components/ui';
-import { handleEvent, loadDaemonInfo, loadLogHistory, loadProjects } from './state/actions';
+import { handleEvent, loadAgents, loadDaemonInfo, loadLogHistory, loadProjects } from './state/actions';
 import { findInstance } from './state/reducer';
 import { dispatch, useAppState } from './state/store';
 import { shortName } from './lib/format';
 import { postMode, syncTitleBar } from './lib/host';
 import { readMode, saveMode, type UiMode } from './lib/simple';
+import { needsYouCount, windowTitle } from './lib/town/street';
 import { NoToken } from './views/NoToken';
 import { PortsView } from './views/PortsView';
 import { NoInstance, ProjectView } from './views/ProjectView';
@@ -61,11 +62,18 @@ function Shell({ token }: { token: string }) {
     return true;
   });
 
+  // "(N) RepoManager" while N Claude sessions need the user; the shell copies it into the window title.
+  const waiting = useAppState((s) => needsYouCount(s.agents));
+  useEffect(() => {
+    document.title = windowTitle(waiting);
+  }, [waiting]);
+
   // Initial load + periodic refresh (git info, worktrees).
   useEffect(() => {
     if (!ready) return;
     void loadProjects();
     void loadDaemonInfo();
+    void loadAgents();
     const t = setInterval(() => {
       if (document.visibilityState === 'visible') void loadProjects();
     }, 30_000);
@@ -88,6 +96,8 @@ function Shell({ token }: { token: string }) {
         if (reconnected) {
           void loadProjects();
           void loadDaemonInfo();
+          // Replaces the list, so sessions that ended while the stream was down disappear.
+          void loadAgents();
           for (const s of sourcesKey ? sourcesKey.split(',') : []) void loadLogHistory(s);
         }
       },

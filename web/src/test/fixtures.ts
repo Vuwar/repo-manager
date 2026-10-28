@@ -1,4 +1,4 @@
-import type { InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
+import type { AgentSessionDto, InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
 
 export function svc(instance: string, name: string, over: Partial<ServiceDto> = {}): ServiceDto {
   const [project, worktree] = instance.split('@');
@@ -67,4 +67,20 @@ export function sampleProjects(): ProjectDto[] {
   );
   const wt = instance('panel-pro@feat-x', [svc('panel-pro@feat-x', 'api', { worktreeReady: false, port: 20001 })]);
   return [project('panel-pro', [main, wt], { tags: ['work'] }), project('other', [instance('other', [svc('other', 'site', { state: 'starting' })])])];
+}
+
+export function agent(id: string, over: Partial<AgentSessionDto> = {}): AgentSessionDto {
+  return {
+    id,
+    folder: 'demo',
+    cwd: 'C:\r\demo',
+    state: 'idle',
+    message: '',
+    surface: 'desktop',
+    since: '2026-10-28T10:00:00Z',
+    touched: '2026-10-28T10:00:00Z',
+    canSend: false,
+    prompts: [],
+    ...over,
+  };
 }

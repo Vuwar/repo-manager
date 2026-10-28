@@ -168,11 +168,46 @@ export interface DaemonInfoDto {
   startedAt: string;
 }
 
+// ---- Agent Town (mirrors RepoManager.Contracts/AgentDtos.cs) ----
+
+export type AgentState = 'idle' | 'working' | 'waiting' | 'done' | 'failed';
+
+export interface PermissionPromptDto {
+  requestId: string;
+  toolName: string;
+  summary: string;
+  /** False when it arrived while the town was not focused: answer it in the session window. */
+  answerable: boolean;
+}
+
+/** One Claude Code session on this machine. */
+export interface AgentSessionDto {
+  id: string;
+  project?: string;
+  worktree?: string;
+  /** Last segment of cwd; names the temporary building when project is not set. */
+  folder: string;
+  cwd: string;
+  state: AgentState;
+  message: string;
+  prompt?: string;
+  lastReply?: string;
+  surface: 'desktop' | 'terminal' | 'other';
+  hostSessionId?: string;
+  /** When the current state began. */
+  since: string;
+  touched: string;
+  canSend: boolean;
+  prompts: PermissionPromptDto[];
+}
+
 export type EventDto =
   | { type: 'status'; payload: ServiceDto }
   | { type: 'task'; payload: TaskDto }
   | { type: 'log'; payload: LogLineDto }
-  | { type: 'projects'; payload?: undefined };
+  | { type: 'projects'; payload?: undefined }
+  | { type: 'agent'; payload: AgentSessionDto }
+  | { type: 'agentEnd'; payload: { id: string } };
 
 // ---- Requests ----
 

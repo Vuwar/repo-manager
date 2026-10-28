@@ -1,4 +1,4 @@
-import type { ActionResultDto, DaemonInfoDto, InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
+import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
 import { instanceOfSource, parseTime } from '../lib/format';
 
 export const MAX_LOG_LINES = 5000;
@@ -38,6 +38,8 @@ export interface AppState {
   toasts: Toast[];
   /** Bumped by "openConfig", so a view that has no config tab (simple mode) can switch to one. */
   configRequests: number;
+  /** Claude Code sessions on this machine, by session id. */
+  agents: Record<string, AgentSessionDto>;
 }
 
 export type Action =
@@ -58,7 +60,10 @@ export type Action =
   | { type: 'pending'; key: string; label: string | null }
   | { type: 'toast'; toast: Toast }
   | { type: 'dismissToast'; id: number }
-  | { type: 'authFailed' };
+  | { type: 'authFailed' }
+  | { type: 'agentsLoaded'; agents: AgentSessionDto[] }
+  | { type: 'agent'; agent: AgentSessionDto }
+  | { type: 'agentEnd'; id: string };
 
 export function initialState(persistedInstance?: string | null): AppState {
   return {
@@ -74,6 +79,7 @@ export function initialState(persistedInstance?: string | null): AppState {
     pending: {},
     toasts: [],
     configRequests: 0,
+    agents: {},
   };
 }
 
@@ -229,6 +235,15 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, toasts: [...state.toasts.slice(-5), action.toast] };
     case 'dismissToast':
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
+    case 'agentsLoaded':
+      return { ...state, agents: Object.fromEntries(action.agents.map((a) => [a.id, a])) };
+    case 'agent':
+      return { ...state, agents: { ...state.agents, [action.agent.id]: action.agent } };
+    case 'agentEnd': {
+      if (!(action.id in state.agents)) return state;
+      const { [action.id]: _ended, ...agents } = state.agents;
+      return { ...state, agents };
+    }
     case 'authFailed':
       return { ...state, authFailed: true };
     default:

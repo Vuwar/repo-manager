@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { line, sampleProjects, svc } from '../test/fixtures';
+import { agent, line, sampleProjects, svc } from '../test/fixtures';
 import { initialState, MAX_LOG_LINES, reducer, type AppState } from './reducer';
 
 function loaded(): AppState {
@@ -103,5 +103,30 @@ describe('reducer', () => {
     expect(s.view).toEqual({ kind: 'instance', key: 'panel-pro@feat-x' });
     expect(s.tab).toBe('config');
     expect(s.configRequests).toBe(1);
+  });
+});
+
+describe('agents', () => {
+  it('agentsLoaded replaces the whole map', () => {
+    let s = reducer(initialState(), { type: 'agentsLoaded', agents: [agent('a'), agent('b')] });
+    s = reducer(s, { type: 'agentsLoaded', agents: [agent('b')] });
+    expect(Object.keys(s.agents)).toEqual(['b']);
+  });
+
+  it('agent upserts by id', () => {
+    let s = reducer(initialState(), { type: 'agent', agent: agent('a') });
+    s = reducer(s, { type: 'agent', agent: agent('a', { state: 'working' }) });
+    expect(Object.keys(s.agents)).toEqual(['a']);
+    expect(s.agents.a.state).toBe('working');
+  });
+
+  it('agentEnd removes', () => {
+    const s = reducer(reducer(initialState(), { type: 'agent', agent: agent('a') }), { type: 'agentEnd', id: 'a' });
+    expect(s.agents).toEqual({});
+  });
+
+  it('agentEnd for an unknown id returns the same state object', () => {
+    const s = initialState();
+    expect(reducer(s, { type: 'agentEnd', id: 'nope' })).toBe(s);
   });
 });

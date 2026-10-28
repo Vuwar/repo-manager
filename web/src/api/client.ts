@@ -1,18 +1,4 @@
-import type {
-  ActionResultDto,
-  DaemonInfoDto,
-  EffectiveConfigDto,
-  FolderDto,
-  GroupActionRequest,
-  InstanceActionRequest,
-  LogLineDto,
-  OpenTool,
-  PortDto,
-  ProjectDto,
-  ProjectSettingsRequest,
-  ScanResultDto,
-  ServiceActionRequest,
-} from './types';
+import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, EffectiveConfigDto, FolderDto, GroupActionRequest, InstanceActionRequest, LogLineDto, OpenTool, PortDto, ProjectDto, ProjectSettingsRequest, ScanResultDto, ServiceActionRequest } from './types';
 
 export const TOKEN_HEADER = 'X-RepoManager-Token';
 
@@ -99,6 +85,7 @@ async function action(path: string, body: unknown): Promise<ActionResultDto> {
 
 export const api = {
   ping: () => request<DaemonInfoDto>('GET', '/api/ping'),
+  townSessions: () => request<AgentSessionDto[]>('GET', '/api/town/sessions'),
   projects: (git = true, signal?: AbortSignal) =>
     request<ProjectDto[]>('GET', '/api/projects' + qs({ git: git ? undefined : false }), undefined, signal),
 
