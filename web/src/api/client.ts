@@ -86,6 +86,11 @@ async function action(path: string, body: unknown): Promise<ActionResultDto> {
 export const api = {
   ping: () => request<DaemonInfoDto>('GET', '/api/ping'),
   townSessions: () => request<AgentSessionDto[]>('GET', '/api/town/sessions'),
+  townFocus: (focused: boolean) => action('/api/town/focus', { focused }),
+  townSend: (sessionId: string, text: string) => action('/api/town/send', { sessionId, text }),
+  townAnswer: (requestId: string, behavior: 'allow' | 'deny', always: boolean) =>
+    action('/api/town/permission/answer', { requestId, behavior, always }),
+  townOpen: (sessionId: string) => action('/api/town/open', { sessionId }),
   projects: (git = true, signal?: AbortSignal) =>
     request<ProjectDto[]>('GET', '/api/projects' + qs({ git: git ? undefined : false }), undefined, signal),
 

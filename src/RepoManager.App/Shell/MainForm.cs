@@ -249,6 +249,25 @@ public sealed class MainForm : Form
         RefreshTitleBar();
     }
 
+    // The town reports focus to the daemon so permission prompts wait for it only while the user is looking.
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        PostWindowFocus(true);
+    }
+
+    protected override void OnDeactivate(EventArgs e)
+    {
+        base.OnDeactivate(e);
+        PostWindowFocus(false);
+    }
+
+    private void PostWindowFocus(bool focused)
+    {
+        if (_web?.CoreWebView2 is not { } core) return;
+        core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "windowFocus", focused }));
+    }
+
     private void PostAmbient()
     {
         if (_web?.CoreWebView2 is not { } core) return;

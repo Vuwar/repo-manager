@@ -20,6 +20,28 @@ export function postMode(mode: UiMode): void {
   webview()?.postMessage({ type: 'mode', mode });
 }
 
+/**
+ * Calls back when the window gains or loses focus: from the desktop shell's activation messages, and from the
+ * page's own focus and blur events (both may fire; repeats are harmless). Returns a cleanup.
+ */
+export function onWindowFocus(cb: (focused: boolean) => void): () => void {
+  const view = webview();
+  const fromShell = (e: { data: unknown }) => {
+    const d = e.data as { type?: string; focused?: unknown } | null;
+    if (d?.type === 'windowFocus' && typeof d.focused === 'boolean') cb(d.focused);
+  };
+  const onFocus = () => cb(true);
+  const onBlur = () => cb(false);
+  view?.addEventListener('message', fromShell);
+  window.addEventListener('focus', onFocus);
+  window.addEventListener('blur', onBlur);
+  return () => {
+    view?.removeEventListener('message', fromShell);
+    window.removeEventListener('focus', onFocus);
+    window.removeEventListener('blur', onBlur);
+  };
+}
+
 /** Toggles borderless full screen (town view only; the shell ignores it elsewhere). */
 export function postFullscreen(): void {
   webview()?.postMessage({ type: 'fullscreen' });
