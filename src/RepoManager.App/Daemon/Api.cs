@@ -328,6 +328,19 @@ public static class Api
                 ? ActionResultDto.Success("opened in Claude")
                 : ActionResultDto.Fail("not a Claude desktop session"));
 
+        api.MapGet("/town/settings", () => TownSettingsOf(d));
+
+        api.MapPost("/town/settings", async (TownSettingsDto req) =>
+        {
+            var before = TownSettingsOf(d);
+            var saved = d.Config.UpdateTownSettings(req);
+            if (!saved.Ok || before.Hooks == req.Hooks) return saved;
+            var (ok, message) = await ClaudeSetup.RunAsync(town: req.Hooks);
+            return ok
+                ? ActionResultDto.Success(req.Hooks ? "Agent Town hooks installed" : "Agent Town hooks removed")
+                : ActionResultDto.Fail("setting saved, but Claude Code's settings were not changed: " + message);
+        });
+
         api.MapPost("/town/focus", (TownFocusRequest req) =>
         {
             d.Permissions.SetFocused(req.Focused);
@@ -350,6 +363,12 @@ public static class Api
             e = e with { TranscriptTitle = title, LastTurn = e.Kind == "SessionStart" ? null : turn };
         }
         return e;
+    }
+
+    private static TownSettingsDto TownSettingsOf(DaemonHost d)
+    {
+        var t = d.Config.Registry.Town ?? new TownSettings();
+        return new TownSettingsDto(t.Tray, t.Notifications, t.Sound, t.Hooks);
     }
 
     /// <summary>The command for shell tools, else the tool name.</summary>

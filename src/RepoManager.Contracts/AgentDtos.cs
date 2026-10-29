@@ -75,5 +75,8 @@ public sealed record TownFocusRequest(bool Focused);
 
 public sealed record TownOpenRequest(string SessionId);
 
+/// <summary>Agent Town attention settings and whether claude-setup installs the town hooks. All on by default.</summary>
+public sealed record TownSettingsDto(bool Tray, bool Notifications, bool Sound, bool Hooks);
+
 /// <summary>A desktop session by its CLAUDE_CODE_HOST_SESSION_ID (local_...), e.g. one linked from a reply.</summary>
 public sealed record TownOpenHostRequest(string HostSessionId);

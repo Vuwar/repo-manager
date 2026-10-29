@@ -178,6 +178,27 @@ public class ClaudeSetupTests : IDisposable
         Assert.Equal("Write", Assert.Single(after["hooks"]!["PreToolUse"]!.AsArray())!["matcher"]!.GetValue<string>());
     }
 
+    [Fact]
+    public void Setup_HooksSettingOff_RemovesAndSkipsTownHooks()
+    {
+        Devm(@"claude-setup --no-mcp --devm C:\x\devm.exe");
+        var home = Path.Combine(_dir, "rm-home");
+        Directory.CreateDirectory(home);
+        File.WriteAllText(Path.Combine(home, "registry.json"), "{\"projects\":[],\"town\":{\"hooks\":false}}");
+        var psi = new ProcessStartInfo(CliTests.DevmExe, @"claude-setup --no-mcp --devm C:\x\devm.exe") { RedirectStandardOutput = true, UseShellExecute = false };
+        psi.Environment["CLAUDE_CONFIG_DIR"] = _dir;
+        psi.Environment["REPOMANAGER_HOME"] = home;
+        using (var p = Process.Start(psi)!)
+        {
+            Assert.Contains("town: hooks removed", p.StandardOutput.ReadToEnd());
+            p.WaitForExit(30000);
+        }
+        var commands = ReadSettings()["hooks"]!.AsObject().SelectMany(e => e.Value!.AsArray()).SelectMany(m => m!["hooks"]!.AsArray()).Select(h => h!["command"]!.GetValue<string>()).ToList();
+        Assert.DoesNotContain(commands, c => c.EndsWith(" town-hook"));
+        Assert.Contains(commands, c => c.EndsWith(" hook"));
+        Assert.Contains("other-tool check", commands);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_dir, true); } catch { }

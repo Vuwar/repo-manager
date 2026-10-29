@@ -36,6 +36,23 @@ public static class ClaudeIntegration
             ? d
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
 
+    /// <summary>The Agent Town hook setting (registry.json "town.hooks"); true when missing or unreadable.</summary>
+    public static bool TownHooksSetting()
+    {
+        try
+        {
+            var path = Path.Combine(RepoManager.Contracts.Protocol.DataDir(), "registry.json");
+            if (!File.Exists(path)) return true;
+            var root = JsonNode.Parse(File.ReadAllText(path), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var hooks = root?["town"]?["hooks"] ?? root?["Town"]?["Hooks"];
+            return hooks is not JsonValue v || !v.TryGetValue<bool>(out var on) || on;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
     public static int Setup(string devmPath, bool skipMcp, bool town = true)
     {
         Directory.CreateDirectory(ClaudeDir);

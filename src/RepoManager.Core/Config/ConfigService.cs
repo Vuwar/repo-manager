@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using RepoManager.Contracts;
 using RepoManager.Core.Git;
 
@@ -225,6 +225,16 @@ public sealed class ConfigService : IDisposable
             Save();
         }
         return ActionResultDto.Success(hidden ? $"hiding {processName}" : $"showing {processName}");
+    }
+
+    public ActionResultDto UpdateTownSettings(TownSettingsDto s)
+    {
+        lock (_lock)
+        {
+            _registry.Town = new TownSettings { Tray = s.Tray, Notifications = s.Notifications, Sound = s.Sound, Hooks = s.Hooks };
+            Save();
+        }
+        return ActionResultDto.Success("saved");
     }
 
     public IReadOnlyList<ScanResultDto> Scan(string dir)

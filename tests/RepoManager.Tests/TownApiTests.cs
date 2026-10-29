@@ -208,6 +208,31 @@ public class TownApiTests(DaemonFixture f)
         Assert.False((await f.Post("api/town/open-host", new TownOpenHostRequest(host))).Ok);
 
     [Fact]
+    public async Task Settings_DefaultsAllOn()
+    {
+        var s = await f.Http.GetFromJsonAsync<TownSettingsDto>("api/town/settings", Protocol.Json);
+        Assert.Equal(new TownSettingsDto(true, true, true, true), s);
+    }
+
+    [Fact]
+    public async Task Settings_RoundTrip_PersistsInRegistry()
+    {
+        try
+        {
+            Assert.True((await f.Post("api/town/settings", new TownSettingsDto(false, true, false, true))).Ok);
+            Assert.Equal(new TownSettingsDto(false, true, false, true), await f.Http.GetFromJsonAsync<TownSettingsDto>("api/town/settings", Protocol.Json));
+            using var fresh = new RepoManager.Core.Config.ConfigService(f.Home, new RepoManager.Core.Git.GitService(), watch: false);
+            Assert.False(fresh.Registry.Town.Tray);
+            Assert.False(fresh.Registry.Town.Sound);
+            Assert.True(fresh.Registry.Town.Notifications);
+        }
+        finally
+        {
+            await f.Post("api/town/settings", new TownSettingsDto(true, true, true, true));
+        }
+    }
+
+    [Fact]
     public async Task Open_UnknownSession_Fails() =>
         Assert.False((await f.Post("api/town/open", new TownOpenRequest(NewId()))).Ok);
 

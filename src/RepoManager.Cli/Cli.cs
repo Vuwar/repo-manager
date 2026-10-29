@@ -49,7 +49,7 @@ public static class Cli
         if (cmd == "hook") return await Hook.RunAsync();
         if (cmd == "town-hook") return await TownHook.RunAsync();
         if (cmd == "mcp") return await Mcp.RunAsync(args.Skip(1).ToArray());
-        if (cmd == "claude-setup") return ClaudeIntegration.Setup(a.Value("devm") ?? Environment.ProcessPath!, a.Flag("no-mcp"), !a.Flag("no-town"));
+        if (cmd == "claude-setup") return ClaudeIntegration.Setup(a.Value("devm") ?? Environment.ProcessPath!, a.Flag("no-mcp"), !a.Flag("no-town") && ClaudeIntegration.TownHooksSetting());
         if (cmd == "claude-remove") return ClaudeIntegration.Remove(a.Flag("no-mcp"));
 
         using var client = new DaemonClient();

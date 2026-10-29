@@ -66,6 +66,21 @@ public sealed class RegistryFile
     public List<string> ScanRoots { get; set; } = [];
     /// <summary>Process names hidden from the dev ports view (e.g. "Spotify").</summary>
     public List<string> HiddenPortProcesses { get; set; } = [];
+    /// <summary>Agent Town settings.</summary>
+    public TownSettings Town { get; set; } = new();
+}
+
+/// <summary>Agent Town: how RepoManager gets the user's attention, and whether the town hooks are installed.</summary>
+public sealed class TownSettings
+{
+    /// <summary>Blink the tray icon while a session needs the user.</summary>
+    public bool Tray { get; set; } = true;
+    /// <summary>Windows notification when a session starts needing the user.</summary>
+    public bool Notifications { get; set; } = true;
+    /// <summary>Sounds for needs-you and done.</summary>
+    public bool Sound { get; set; } = true;
+    /// <summary>`devm claude-setup` installs the town hooks into Claude Code.</summary>
+    public bool Hooks { get; set; } = true;
 }
 
 public sealed class RegistryProject
