@@ -81,13 +81,13 @@ public static class TranscriptReader
     }
 
     /// <summary>A user entry that is a typed prompt, not a tool result.</summary>
-    private static bool IsPrompt(JsonElement e)
+    internal static bool IsPrompt(JsonElement e)
     {
         if (!e.TryGetProperty("message", out var m) || !m.TryGetProperty("content", out var c)) return false;
         if (c.ValueKind == JsonValueKind.String) return true;
         return c.ValueKind == JsonValueKind.Array && c.EnumerateArray().Any(b => Str(b, "type") == "text");
     }
 
-    private static string? Str(JsonElement el, string name) =>
+    internal static string? Str(JsonElement el, string name) =>
         el.ValueKind == JsonValueKind.Object && el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 }

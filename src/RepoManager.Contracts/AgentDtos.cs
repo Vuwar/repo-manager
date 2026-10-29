@@ -92,3 +92,38 @@ public sealed record TownSettingsDto(bool Tray, bool Notifications, bool Sound, 
 
 /// <summary>A desktop session by its CLAUDE_CODE_HOST_SESSION_ID (local_...), e.g. one linked from a reply.</summary>
 public sealed record TownOpenHostRequest(string HostSessionId);
+
+/// <summary>A finished or closed Claude Code session, read from its transcript (and the desktop app's index).</summary>
+public sealed record PastSessionDto
+{
+    /// <summary>The transcript's session id.</summary>
+    public required string Id { get; init; }
+    public string? Project { get; init; }
+    public string? Worktree { get; init; }
+    public required string Title { get; init; }
+    /// <summary>desktop or terminal.</summary>
+    public required string Surface { get; init; }
+    /// <summary>The desktop app's id (local_...), when the desktop index names this session.</summary>
+    public string? HostSessionId { get; init; }
+    public bool Archived { get; init; }
+    public DateTimeOffset Started { get; init; }
+    public DateTimeOffset LastActivity { get; init; }
+    public required string Cwd { get; init; }
+}
+
+/// <summary>One line of a past session: role user, assistant or tool.</summary>
+public sealed record TranscriptEntryDto
+{
+    public required string Role { get; init; }
+    public required string Text { get; init; }
+    public DateTimeOffset? At { get; init; }
+}
+
+/// <summary>Entries [Start, Start + Entries.Count) of a past session's Total entries.</summary>
+public sealed record TranscriptPageDto
+{
+    public required string Id { get; init; }
+    public required IReadOnlyList<TranscriptEntryDto> Entries { get; init; }
+    public int Start { get; init; }
+    public int Total { get; init; }
+}

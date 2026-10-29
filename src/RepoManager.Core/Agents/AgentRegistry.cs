@@ -165,7 +165,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         };
     }
 
-    private const int TitleMax = 48;
+    internal const int TitleMax = 48;
 
     private static bool IsWrapUp(string? tool) =>
         tool != null && tool.StartsWith("mcp__ccd_turn__", StringComparison.Ordinal) && tool.EndsWith("wrap_up", StringComparison.Ordinal);
@@ -220,7 +220,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         _ => s,
     };
 
-    private static string Clip(string text, int max = MessageMax) => text.Length <= max ? text : text[..max];
+    internal static string Clip(string text, int max = MessageMax) => text.Length <= max ? text : text[..max];
 
     private static string FolderName(string cwd)
     {
