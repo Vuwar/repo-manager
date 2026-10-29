@@ -61,6 +61,15 @@ export async function loadAgents(): Promise<void> {
   }
 }
 
+/** Fetches /api/town/progress (XP). On failure the town shows no levels until the next event. */
+export async function loadProgress(): Promise<void> {
+  try {
+    dispatch({ type: 'progressLoaded', progress: await api.townProgress() });
+  } catch {
+    /* shown via connection state */
+  }
+}
+
 export async function loadDaemonInfo(): Promise<void> {
   try {
     dispatch({ type: 'daemon', info: await api.ping() });
@@ -233,6 +242,9 @@ export function handleEvent(e: EventDto): void {
       break;
     case 'agentEnd':
       if (e.payload) dispatch({ type: 'agentEnd', id: e.payload.id });
+      break;
+    case 'progress':
+      if (e.payload) dispatch({ type: 'progress', progress: e.payload.progress, award: e.payload.award, at: Date.now() });
       break;
   }
 }

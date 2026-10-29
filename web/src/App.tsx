@@ -8,7 +8,7 @@ import { LogPane } from './components/LogPane';
 import { Sidebar } from './components/Sidebar';
 import { Toasts } from './components/Toasts';
 import { Button } from './components/ui';
-import { handleEvent, loadAgents, loadDaemonInfo, loadLogHistory, loadProjects } from './state/actions';
+import { handleEvent, loadAgents, loadDaemonInfo, loadLogHistory, loadProgress, loadProjects } from './state/actions';
 import { findInstance } from './state/reducer';
 import { dispatch, useAppState } from './state/store';
 import { shortName } from './lib/format';
@@ -95,6 +95,7 @@ function Shell({ token }: { token: string }) {
     void loadProjects();
     void loadDaemonInfo();
     void loadAgents();
+    void loadProgress();
     // Agents too: an event lost while the stream reopens would otherwise leave a ghost worker and a stale "(N)".
     const t = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
@@ -119,6 +120,7 @@ function Shell({ token }: { token: string }) {
         dispatch({ type: 'connection', state: 'open' });
         // Every (re)open may have missed agent events, also when the stream reopens for new log sources.
         void loadAgents();
+        void loadProgress();
         if (reconnected) {
           void loadProjects();
           void loadDaemonInfo();

@@ -1,4 +1,4 @@
-import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
+import type { ActionResultDto, AgentSessionDto, TownProgressDto, XpAwardDto, DaemonInfoDto, InstanceDto, LogLineDto, ProjectDto, ServiceDto, TaskDto } from '../api/types';
 import { instanceOfSource, parseTime } from '../lib/format';
 
 export const MAX_LOG_LINES = 5000;
@@ -42,6 +42,10 @@ export interface AppState {
   agents: Record<string, AgentSessionDto>;
   /** Recent status messages per session ("Used Bash"), oldest first; the dialogue box shows them while working. */
   agentLog: Record<string, string[]>;
+  /** Agent Town XP for the user and each repo; null until loaded. */
+  progress: TownProgressDto | null;
+  /** The latest XP awards (at most 10, newest last), stamped with when they arrived (ms). */
+  awards: (XpAwardDto & { at: number })[];
 }
 
 export type Action =
@@ -65,7 +69,9 @@ export type Action =
   | { type: 'authFailed' }
   | { type: 'agentsLoaded'; agents: AgentSessionDto[] }
   | { type: 'agent'; agent: AgentSessionDto }
-  | { type: 'agentEnd'; id: string };
+  | { type: 'agentEnd'; id: string }
+  | { type: 'progressLoaded'; progress: TownProgressDto }
+  | { type: 'progress'; progress: TownProgressDto; award: XpAwardDto; at: number };
 
 export function initialState(persistedInstance?: string | null): AppState {
   return {
@@ -83,6 +89,8 @@ export function initialState(persistedInstance?: string | null): AppState {
     configRequests: 0,
     agents: {},
     agentLog: {},
+    progress: null,
+    awards: [],
   };
 }
 
@@ -263,6 +271,10 @@ export function reducer(state: AppState, action: Action): AppState {
       const { [action.id]: _log, ...agentLog } = state.agentLog;
       return { ...state, agents, agentLog };
     }
+    case 'progressLoaded':
+      return { ...state, progress: action.progress };
+    case 'progress':
+      return { ...state, progress: action.progress, awards: [...state.awards, { ...action.award, at: action.at }].slice(-10) };
     case 'authFailed':
       return { ...state, authFailed: true };
     default:

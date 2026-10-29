@@ -207,6 +207,28 @@ export interface AgentSessionDto {
   wrapUp?: WrapUpDto;
 }
 
+/** XP and level: the level starts at levelStart XP, the next one at nextLevel. */
+export interface LevelDto {
+  xp: number;
+  level: number;
+  levelStart: number;
+  nextLevel: number;
+}
+
+/** The user's level and every repo's, by project name. */
+export interface TownProgressDto {
+  player: LevelDto;
+  repos: Record<string, LevelDto>;
+}
+
+/** One XP award: a prompt answered from the town, a town message that got a session working, or a finished turn. */
+export interface XpAwardDto {
+  kind: 'answer' | 'send' | 'turn';
+  amount: number;
+  sessionId?: string;
+  repo?: string;
+}
+
 /** Agent Town attention settings and whether claude-setup installs the town hooks. */
 export interface TownSettingsDto {
   tray: boolean;
@@ -227,7 +249,8 @@ export type EventDto =
   | { type: 'log'; payload: LogLineDto }
   | { type: 'projects'; payload?: undefined }
   | { type: 'agent'; payload: AgentSessionDto }
-  | { type: 'agentEnd'; payload: { id: string } };
+  | { type: 'agentEnd'; payload: { id: string } }
+  | { type: 'progress'; payload: { progress: TownProgressDto; award: XpAwardDto } };
 
 // ---- Requests ----
 
