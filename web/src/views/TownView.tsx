@@ -56,7 +56,13 @@ function countsText(lots: Lot[]): string {
 }
 
 /** Agent Town: every project as a building on one street, every Claude session as a worker. Read-only. */
-export function TownView({ onLeave, openSessionId }: { onLeave: () => void; openSessionId?: string | null }) {
+/** A request (from a notification click) to open one session's dialogue; a new nonce repeats it. */
+export interface OpenRequest {
+  id: string;
+  nonce: number;
+}
+
+export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRequest?: OpenRequest | null }) {
   const projects = useAppState((s) => s.projects);
   const agents = useAppState((s) => s.agents);
   const street = useMemo(() => buildStreet(projects, agents), [projects, agents]);
@@ -116,26 +122,32 @@ export function TownView({ onLeave, openSessionId }: { onLeave: () => void; open
   // In order: a late "true" overtaking a "false" would hold prompts for up to the 15 s lease.
   useEffect(() => startFocusReporting(inOrder((f) => api.townFocus(f))), []);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  // Settings: the gear opens the panel; the speaker button is the sound mute.
+  // Settings: the town owns one copy, shared by the gear's panel and the speaker button (the sound mute).
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<TownSettingsDto | null>(null);
   useEffect(() => {
     let live = true;
-    api.townSettings?.().then((s) => live && setSettings(s), () => {});
+    api.townSettings().then(
+      (s) => live && setSettings(s),
+      () => {},
+    );
     return () => {
       live = false;
     };
-  }, [settingsOpen]);
-  const toggleSound = () => {
-    if (!settings) return;
-    const next = { ...settings, sound: !settings.sound };
+  }, []);
+  /** Shows the change at once; a failed save puts the previous settings back. */
+  const saveSettings = async (next: TownSettingsDto) => {
+    const before = settings;
     setSettings(next);
-    void api.saveTownSettings(next);
+    const r = await api.saveTownSettings(next);
+    if (!r.ok && before) setSettings(before);
+    return r;
   };
+  const toggleSound = () => void (settings && saveSettings({ ...settings, sound: !settings.sound }));
   // A notification click the shell could not route opens that worker's dialogue.
   useEffect(() => {
-    if (openSessionId) setOpen(openSessionId);
-  }, [openSessionId]);
+    if (openRequest) setOpen(openRequest.id);
+  }, [openRequest]);
   const openSession = open ? agents[open] : undefined;
   const openLot = openSession ? lots.find((l) => l.workers.some((w) => w.id === openSession.id)) : undefined;
   useEffect(() => {
@@ -271,6 +283,7 @@ export function TownView({ onLeave, openSessionId }: { onLeave: () => void; open
           className="town-leave"
           aria-label="Sounds"
           aria-pressed={settings?.sound ?? true}
+          disabled={!settings}
           title={settings?.sound === false ? 'Sounds are off' : 'Sounds are on'}
           onClick={toggleSound}
         >
@@ -356,7 +369,7 @@ export function TownView({ onLeave, openSessionId }: { onLeave: () => void; open
           onDraft={(text) => setDrafts((d) => ({ ...d, [openSession.id]: text }))}
         />
       )}
-      {settingsOpen && <TownSettings onClose={() => setSettingsOpen(false)} onChange={setSettings} />}
+      {settingsOpen && <TownSettings settings={settings} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
       {questsOpen && <QuestLog quests={questsFor(lots, seen)} now={now} onOpen={talkTo} onClose={() => setQuestsOpen(false)} />}
     </div>
   );

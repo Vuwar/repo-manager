@@ -336,11 +336,33 @@ describe('TownView', () => {
       expect(screen.getByRole('checkbox', { name: 'Windows notifications' })).toBeTruthy();
     });
 
-    it('opens the box the shell asks for', () => {
+    it('opens the box the shell asks for, again for a second request', () => {
       dispatch({ type: 'projectsLoaded', projects: [p('alpha')] });
       dispatch({ type: 'agentsLoaded', agents: [agent('s9', { project: 'alpha', state: 'waiting', message: 'Which db?' })] });
-      render(<TownView onLeave={() => {}} openSessionId="s9" />);
+      const view = render(<TownView onLeave={() => {}} openRequest={{ id: 's9', nonce: 1 }} />);
       expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(dialog()).toBeNull();
+      view.rerender(<TownView onLeave={() => {}} openRequest={{ id: 's9', nonce: 2 }} />);
+      expect(dialog()).toBeTruthy();
+    });
+
+    it('the settings panel does not undo the speaker', async () => {
+      setup();
+      await act(async () => {});
+      await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Town settings' })));
+      await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Sounds' })));
+      await act(async () => void fireEvent.click(screen.getByRole('checkbox', { name: 'Windows notifications' })));
+      expect(api.saveTownSettings).toHaveBeenLastCalledWith({ tray: true, notifications: false, sound: false, hooks: true });
+      expect(screen.getByRole('button', { name: 'Sounds' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('a failed save puts the speaker back', async () => {
+      api.saveTownSettings.mockResolvedValueOnce({ ok: false, error: 'down', affected: [], logTail: [] } as unknown as typeof ok);
+      setup();
+      await act(async () => {});
+      await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Sounds' })));
+      expect(screen.getByRole('button', { name: 'Sounds' }).getAttribute('aria-pressed')).toBe('true');
     });
 
     it('reports focus while mounted', async () => {

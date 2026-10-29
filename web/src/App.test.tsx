@@ -108,3 +108,25 @@ describe('shell commands', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('TOOL · Session A');
   });
 });
+
+describe('shell handshake', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+    delete (window as unknown as { chrome?: unknown }).chrome;
+  });
+
+  it('tells the shell the page is ready, so it can deliver a waiting notification click', () => {
+    sessionStorage.setItem('repomanager.token', 'tok');
+    const posted: unknown[] = [];
+    (window as unknown as { chrome: unknown }).chrome = {
+      webview: { postMessage: (m: unknown) => posted.push(m), addEventListener: () => {}, removeEventListener: () => {} },
+    };
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+    vi.stubGlobal('fetch', (url: string) =>
+      String(url).startsWith('/api/events') ? new Promise(() => {}) : Promise.resolve(new Response('[]', { status: 200 })),
+    );
+    render(<App />);
+    expect(posted).toContainEqual({ type: 'ready' });
+  });
+});

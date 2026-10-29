@@ -42,6 +42,11 @@ export function onWindowFocus(cb: (focused: boolean) => void): () => void {
   };
 }
 
+/** Tells the shell the page listens for its messages (it holds a notification click until then). */
+export function postReady(): void {
+  webview()?.postMessage({ type: 'ready' });
+}
+
 /** Commands from the desktop shell: a notification click asks the town to open a session's dialogue. */
 export function onShellCommand(cb: (cmd: { type: 'openSession'; id: string }) => void): () => void {
   const view = webview();

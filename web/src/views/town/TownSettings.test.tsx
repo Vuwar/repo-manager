@@ -1,45 +1,50 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { ActionResultDto, TownSettingsDto } from '../../api/types';
+import { TownSettings } from './TownSettings';
 
-const allOn = { tray: true, notifications: true, sound: true, hooks: true };
-const api = {
-  townSettings: vi.fn(),
-  saveTownSettings: vi.fn(),
-};
-vi.mock('../../api/client', () => ({ api }));
+const allOn: TownSettingsDto = { tray: true, notifications: true, sound: true, hooks: true };
+const ok: ActionResultDto = { ok: true, message: 'saved', affected: [], logTail: [] };
 
-const { TownSettings } = await import('./TownSettings');
-
-async function show() {
-  const onChange = vi.fn();
-  await act(async () => void render(<TownSettings onClose={() => {}} onChange={onChange} />));
-  return { onChange };
+function show(settings: TownSettingsDto | null = allOn, result: ActionResultDto = ok) {
+  const onSave = vi.fn((_: TownSettingsDto) => Promise.resolve(result));
+  render(<TownSettings settings={settings} onSave={onSave} onClose={() => {}} />);
+  return { onSave };
 }
 
 describe('TownSettings', () => {
-  beforeEach(() => {
-    api.townSettings.mockReset().mockResolvedValue(allOn);
-    api.saveTownSettings.mockReset().mockResolvedValue({ ok: true, message: 'saved', affected: [], logTail: [] });
-  });
-
-  it('shows the four switches as loaded', async () => {
-    await show();
-    for (const name of ['Blink the tray icon', 'Windows notifications', 'Sounds', 'Agent Town hooks in Claude Code'])
+  it('shows the four switches from the settings it is given', () => {
+    show({ ...allOn, sound: false });
+    for (const name of ['Blink the tray icon', 'Windows notifications', 'Agent Town hooks in Claude Code'])
       expect((screen.getByRole('checkbox', { name }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'Sounds' }) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText(/Off removes the town hooks/)).toBeTruthy();
   });
 
   it('saves the whole set when one switch changes', async () => {
-    const { onChange } = await show();
+    const { onSave } = show();
     await act(async () => void fireEvent.click(screen.getByRole('checkbox', { name: 'Sounds' })));
-    expect(api.saveTownSettings).toHaveBeenCalledWith({ ...allOn, sound: false });
-    expect(onChange).toHaveBeenCalledWith({ ...allOn, sound: false });
+    expect(onSave).toHaveBeenCalledWith({ ...allOn, sound: false });
   });
 
   it('shows what the daemon says, including a failure', async () => {
-    api.saveTownSettings.mockResolvedValue({ ok: false, error: "setting saved, but Claude Code's settings were not changed: x", affected: [], logTail: [] });
-    await show();
+    show(allOn, { ok: false, error: "setting saved, but Claude Code's settings were not changed: x", affected: [], logTail: [] });
     await act(async () => void fireEvent.click(screen.getByRole('checkbox', { name: 'Agent Town hooks in Claude Code' })));
     expect(screen.getByText(/were not changed/)).toBeTruthy();
+  });
+
+  it('disables the switches while a change is saving', async () => {
+    let finish: (r: ActionResultDto) => void = () => {};
+    const onSave = vi.fn(() => new Promise<ActionResultDto>((r) => (finish = r)));
+    render(<TownSettings settings={allOn} onSave={onSave} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Agent Town hooks in Claude Code' }));
+    expect((screen.getByRole('checkbox', { name: 'Sounds' }) as HTMLInputElement).disabled).toBe(true);
+    await act(async () => finish(ok));
+    expect((screen.getByRole('checkbox', { name: 'Sounds' }) as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('says so while the settings load', () => {
+    show(null);
+    expect(screen.getByText('Loading…')).toBeTruthy();
   });
 });

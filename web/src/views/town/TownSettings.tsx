@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
-import type { TownSettingsDto } from '../../api/types';
+import { useState } from 'react';
+import type { ActionResultDto, TownSettingsDto } from '../../api/types';
 
 const SWITCHES: { key: keyof TownSettingsDto; label: string; note?: string }[] = [
   { key: 'tray', label: 'Blink the tray icon', note: 'While a session needs you and the town is not on screen.' },
@@ -9,24 +8,23 @@ const SWITCHES: { key: keyof TownSettingsDto; label: string; note?: string }[] =
   { key: 'hooks', label: 'Agent Town hooks in Claude Code', note: "Off removes the town hooks from Claude Code's settings; the town then stops seeing sessions." },
 ];
 
+interface Props {
+  /** The town's settings (null while they load); the town owns them, so the speaker and this panel agree. */
+  settings: TownSettingsDto | null;
+  onSave: (next: TownSettingsDto) => Promise<ActionResultDto>;
+  onClose: () => void;
+}
+
 /** Agent Town settings panel. Every change saves the whole set; the daemon's answer is shown under it. */
-export function TownSettings({ onClose, onChange }: { onClose: () => void; onChange?: (s: TownSettingsDto) => void }) {
-  const [settings, setSettings] = useState<TownSettingsDto | null>(null);
+export function TownSettings({ settings, onSave, onClose }: Props) {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => {
-    let live = true;
-    api.townSettings().then((s) => live && setSettings(s), () => live && setNote({ ok: false, text: 'Could not load the settings.' }));
-    return () => {
-      live = false;
-    };
-  }, []);
+  const [saving, setSaving] = useState(false);
 
   const toggle = async (key: keyof TownSettingsDto) => {
-    if (!settings) return;
-    const next = { ...settings, [key]: !settings[key] };
-    setSettings(next);
-    onChange?.(next);
-    const r = await api.saveTownSettings(next);
+    if (!settings || saving) return;
+    setSaving(true);
+    const r = await onSave({ ...settings, [key]: !settings[key] });
+    setSaving(false);
     setNote(r.ok ? (r.message && r.message !== 'saved' ? { ok: true, text: r.message } : null) : { ok: false, text: r.error ?? 'Could not save.' });
   };
 
@@ -38,6 +36,7 @@ export function TownSettings({ onClose, onChange }: { onClose: () => void; onCha
           ×
         </button>
       </header>
+      {!settings && <p className="town-settings-note">Loading…</p>}
       {settings &&
         SWITCHES.map((s) => (
           <label key={s.key} className="town-switch">
@@ -46,6 +45,7 @@ export function TownSettings({ onClose, onChange }: { onClose: () => void; onCha
               aria-label={s.label}
               aria-describedby={'town-note-' + s.key}
               checked={settings[s.key]}
+              disabled={saving}
               onChange={() => void toggle(s.key)}
             />
             <span>
