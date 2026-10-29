@@ -3722,3 +3722,57 @@ details.advanced[open] {
   cursor: pointer;
   text-decoration: underline;
 }
+
+.town-settings {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  width: min(380px, calc(100vw - 24px));
+  z-index: 7;
+  color: #f2ead4;
+  background: #151a38;
+  border: 4px solid #f2ead4;
+  box-shadow: 0 0 0 4px #151a38;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.town-settings header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-weight: bold;
+  border-bottom: 2px solid #2d3668;
+}
+.town-settings header button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.town-switch {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.town-switch input {
+  margin-top: 2px;
+  accent-color: #ffc857;
+}
+.town-switch-label {
+  display: block;
+  font-weight: bold;
+}
+.town-switch-note {
+  display: block;
+  color: #98a1cf;
+}
+.town-settings-note {
+  margin: 0;
+  padding: 6px 10px 10px;
+  color: #98a1cf;
+}
+.town-settings-note.bad {
+  color: #ff8a7a;
+}

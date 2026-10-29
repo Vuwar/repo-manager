@@ -6,6 +6,8 @@ import { questsFor } from '../lib/town/quests';
 import { useNow } from '../lib/useNow';
 import { DialogueBox } from './town/DialogueBox';
 import { QuestLog } from './town/QuestLog';
+import { TownSettings } from './town/TownSettings';
+import type { TownSettingsDto } from '../api/types';
 import {
   ARROW_PAN,
   BW,
@@ -54,7 +56,7 @@ function countsText(lots: Lot[]): string {
 }
 
 /** Agent Town: every project as a building on one street, every Claude session as a worker. Read-only. */
-export function TownView({ onLeave }: { onLeave: () => void }) {
+export function TownView({ onLeave, openSessionId }: { onLeave: () => void; openSessionId?: string | null }) {
   const projects = useAppState((s) => s.projects);
   const agents = useAppState((s) => s.agents);
   const street = useMemo(() => buildStreet(projects, agents), [projects, agents]);
@@ -114,6 +116,26 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
   // In order: a late "true" overtaking a "false" would hold prompts for up to the 15 s lease.
   useEffect(() => startFocusReporting(inOrder((f) => api.townFocus(f))), []);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Settings: the gear opens the panel; the speaker button is the sound mute.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<TownSettingsDto | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.townSettings?.().then((s) => live && setSettings(s), () => {});
+    return () => {
+      live = false;
+    };
+  }, [settingsOpen]);
+  const toggleSound = () => {
+    if (!settings) return;
+    const next = { ...settings, sound: !settings.sound };
+    setSettings(next);
+    void api.saveTownSettings(next);
+  };
+  // A notification click the shell could not route opens that worker's dialogue.
+  useEffect(() => {
+    if (openSessionId) setOpen(openSessionId);
+  }, [openSessionId]);
   const openSession = open ? agents[open] : undefined;
   const openLot = openSession ? lots.find((l) => l.workers.some((w) => w.id === openSession.id)) : undefined;
   useEffect(() => {
@@ -244,6 +266,19 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
       <header className="town-bar">
         <span className="town-title">Agent Town</span>
         <span className="town-counts">{countsText(lots)}</span>
+        <button
+          type="button"
+          className="town-leave"
+          aria-label="Sounds"
+          aria-pressed={settings?.sound ?? true}
+          title={settings?.sound === false ? 'Sounds are off' : 'Sounds are on'}
+          onClick={toggleSound}
+        >
+          {settings?.sound === false ? '🔇' : '🔊'}
+        </button>
+        <button type="button" className="town-leave" aria-label="Town settings" title="Town settings" onClick={() => setSettingsOpen((o) => !o)}>
+          ⚙
+        </button>
         <button type="button" className="town-leave" onClick={onLeave}>
           Leave town
         </button>
@@ -321,6 +356,7 @@ export function TownView({ onLeave }: { onLeave: () => void }) {
           onDraft={(text) => setDrafts((d) => ({ ...d, [openSession.id]: text }))}
         />
       )}
+      {settingsOpen && <TownSettings onClose={() => setSettingsOpen(false)} onChange={setSettings} />}
       {questsOpen && <QuestLog quests={questsFor(lots, seen)} now={now} onOpen={talkTo} onClose={() => setQuestsOpen(false)} />}
     </div>
   );

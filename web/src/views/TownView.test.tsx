@@ -10,6 +10,8 @@ const api = {
   townAnswer: vi.fn(() => Promise.resolve(ok)),
   townOpen: vi.fn(() => Promise.resolve(ok)),
   townOpenHost: vi.fn(() => Promise.resolve(ok)),
+  townSettings: vi.fn(() => Promise.resolve({ tray: true, notifications: true, sound: true, hooks: true })),
+  saveTownSettings: vi.fn(() => Promise.resolve(ok)),
 };
 vi.mock('../api/client', () => ({ api }));
 const { workerSpot } = await import('../lib/town/render');
@@ -316,6 +318,29 @@ describe('TownView', () => {
       fireEvent.keyDown(window, { key: ' ' });
       fireEvent.click(screen.getByRole('button', { name: 'Gone' }));
       expect(api.townOpenHost).toHaveBeenCalledWith('local_zzz');
+    });
+
+    it('the speaker button mutes and unmutes sounds', async () => {
+      setup();
+      await act(async () => {});
+      const speaker = screen.getByRole('button', { name: 'Sounds' });
+      expect(speaker.getAttribute('aria-pressed')).toBe('true');
+      await act(async () => void fireEvent.click(speaker));
+      expect(api.saveTownSettings).toHaveBeenLastCalledWith({ tray: true, notifications: true, sound: false, hooks: true });
+      expect(speaker.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('the gear opens the settings panel', async () => {
+      setup();
+      await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Town settings' })));
+      expect(screen.getByRole('checkbox', { name: 'Windows notifications' })).toBeTruthy();
+    });
+
+    it('opens the box the shell asks for', () => {
+      dispatch({ type: 'projectsLoaded', projects: [p('alpha')] });
+      dispatch({ type: 'agentsLoaded', agents: [agent('s9', { project: 'alpha', state: 'waiting', message: 'Which db?' })] });
+      render(<TownView onLeave={() => {}} openSessionId="s9" />);
+      expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
     });
 
     it('reports focus while mounted', async () => {

@@ -79,3 +79,32 @@ describe('window title', () => {
     expect(document.title).toBe('(1) RepoManager');
   });
 });
+
+describe('shell commands', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+    localStorage.clear();
+    delete (window as unknown as { chrome?: unknown }).chrome;
+  });
+
+  it('a notification click from the shell opens that worker in the town', async () => {
+    sessionStorage.setItem('repomanager.token', 'tok');
+    localStorage.setItem('repomanager.mode', JSON.stringify('simple'));
+    const listeners: ((e: { data: unknown }) => void)[] = [];
+    (window as unknown as { chrome: unknown }).chrome = {
+      webview: { postMessage: () => {}, addEventListener: (_: string, l: (e: { data: unknown }) => void) => listeners.push(l), removeEventListener: () => {} },
+    };
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+    vi.stubGlobal('fetch', (url: string) =>
+      String(url).startsWith('/api/events') ? new Promise(() => {}) : Promise.resolve(new Response('[]', { status: 200 })),
+    );
+    const { dispatch } = await import('./state/store');
+    const { agent } = await import('./test/fixtures');
+    render(<App />);
+    act(() => dispatch({ type: 'agentsLoaded', agents: [agent('n1', { folder: 'tool', cwd: 'C:\t\tool', state: 'waiting' })] }));
+    act(() => listeners.forEach((l) => l({ data: { type: 'openSession', id: 'n1' } })));
+    expect(document.querySelector('.town')).toBeTruthy();
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('TOOL · Session A');
+  });
+});

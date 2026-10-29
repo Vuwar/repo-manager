@@ -1,4 +1,4 @@
-import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, EffectiveConfigDto, FolderDto, GroupActionRequest, InstanceActionRequest, LogLineDto, OpenTool, PortDto, ProjectDto, ProjectSettingsRequest, ScanResultDto, ServiceActionRequest } from './types';
+import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, EffectiveConfigDto, FolderDto, GroupActionRequest, InstanceActionRequest, LogLineDto, OpenTool, PortDto, ProjectDto, ProjectSettingsRequest, ScanResultDto, ServiceActionRequest, TownSettingsDto } from './types';
 
 export const TOKEN_HEADER = 'X-RepoManager-Token';
 
@@ -92,6 +92,8 @@ export const api = {
     action('/api/town/permission/answer', { requestId, behavior, always }),
   townOpen: (sessionId: string) => action('/api/town/open', { sessionId }),
   townOpenHost: (hostSessionId: string) => action('/api/town/open-host', { hostSessionId }),
+  townSettings: () => request<TownSettingsDto>('GET', '/api/town/settings'),
+  saveTownSettings: (settings: TownSettingsDto) => action('/api/town/settings', settings),
   projects: (git = true, signal?: AbortSignal) =>
     request<ProjectDto[]>('GET', '/api/projects' + qs({ git: git ? undefined : false }), undefined, signal),
 

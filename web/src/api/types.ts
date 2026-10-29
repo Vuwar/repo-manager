@@ -207,6 +207,14 @@ export interface AgentSessionDto {
   wrapUp?: WrapUpDto;
 }
 
+/** Agent Town attention settings and whether claude-setup installs the town hooks. */
+export interface TownSettingsDto {
+  tray: boolean;
+  notifications: boolean;
+  sound: boolean;
+  hooks: boolean;
+}
+
 export interface WrapUpDto {
   recap?: string;
   ask?: string;

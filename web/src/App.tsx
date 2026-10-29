@@ -12,7 +12,7 @@ import { handleEvent, loadAgents, loadDaemonInfo, loadLogHistory, loadProjects }
 import { findInstance } from './state/reducer';
 import { dispatch, useAppState } from './state/store';
 import { shortName } from './lib/format';
-import { postMode, syncTitleBar } from './lib/host';
+import { onShellCommand, postMode, syncTitleBar } from './lib/host';
 import { readMode, saveMode, type UiMode } from './lib/simple';
 import { needsYouCount, windowTitle } from './lib/town/street';
 import { NoToken } from './views/NoToken';
@@ -54,6 +54,19 @@ function Shell({ token }: { token: string }) {
     if (mode !== 'town') beforeTown.current = mode;
     setMode('town');
   };
+  // A notification click the shell could not route: show the town with that worker's dialogue.
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  useEffect(
+    () =>
+      onShellCommand((cmd) => {
+        if (modeRef.current !== 'town') beforeTown.current = modeRef.current;
+        setMode('town');
+        setOpenSessionId(cmd.id);
+      }),
+    [],
+  );
   // The desktop shell shrinks the window for the compact view and restores it after.
   useEffect(() => postMode(mode), [mode]);
   // The window's title bar takes the app's colors, following the light/dark switch.
@@ -162,7 +175,7 @@ function Shell({ token }: { token: string }) {
     };
   }, [current]);
 
-  if (mode === 'town') return <TownView onLeave={() => setMode(beforeTown.current)} />;
+  if (mode === 'town') return <TownView onLeave={() => setMode(beforeTown.current)} openSessionId={openSessionId} />;
   if (mode === 'mini') return <MiniView onExpand={() => setMode('simple')} />;
   if (mode === 'simple') return <SimpleView onFullView={() => setMode('full')} onCompact={() => setMode('mini')} onTown={enterTown} />;
 

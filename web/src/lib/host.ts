@@ -42,6 +42,18 @@ export function onWindowFocus(cb: (focused: boolean) => void): () => void {
   };
 }
 
+/** Commands from the desktop shell: a notification click asks the town to open a session's dialogue. */
+export function onShellCommand(cb: (cmd: { type: 'openSession'; id: string }) => void): () => void {
+  const view = webview();
+  if (!view) return () => {};
+  const listener = (e: { data: unknown }) => {
+    const d = e.data as { type?: string; id?: unknown } | null;
+    if (d?.type === 'openSession' && typeof d.id === 'string') cb({ type: 'openSession', id: d.id });
+  };
+  view.addEventListener('message', listener);
+  return () => view.removeEventListener('message', listener);
+}
+
 /** Toggles borderless full screen, or with `on` sets it (the shell ignores it outside the town). */
 export function postFullscreen(on?: boolean): void {
   webview()?.postMessage(on === undefined ? { type: 'fullscreen' } : { type: 'fullscreen', on });
