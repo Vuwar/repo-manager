@@ -19,6 +19,8 @@ public sealed class TownProgress
     private sealed class FileShape
     {
         public int Player { get; set; }
+        /// <summary>Saved so it keeps growing across restarts (an open town keeps the snapshot with the higher one).</summary>
+        public long Revision { get; set; }
         public Dictionary<string, int> Repos { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -29,7 +31,6 @@ public sealed class TownProgress
     private readonly Dictionary<string, string> _lastState = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _sent = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _lastSeq = new(StringComparer.Ordinal);
-    private long _revision;
 
     /// <summary>Raised after every award, outside the lock, with the new totals.</summary>
     public event Action<TownProgressDto, XpAwardDto>? Awarded;
@@ -100,7 +101,7 @@ public sealed class TownProgress
     }
 
     private TownProgressDto SnapshotLocked() =>
-        new(LevelOf(_data.Player), _data.Repos.ToDictionary(p => p.Key, p => LevelOf(p.Value), StringComparer.OrdinalIgnoreCase), _revision);
+        new(LevelOf(_data.Player), _data.Repos.ToDictionary(p => p.Key, p => LevelOf(p.Value), StringComparer.OrdinalIgnoreCase), _data.Revision);
 
     private XpAwardDto Award(XpAwardDto award, string? repo)
     {
@@ -109,7 +110,7 @@ public sealed class TownProgress
         {
             if (repo != null) _data.Repos[repo] = Math.Min(MaxXp, _data.Repos.GetValueOrDefault(repo) + award.Amount);
             else _data.Player = Math.Min(MaxXp, _data.Player + award.Amount);
-            _revision++;
+            _data.Revision++;
             Save();
             snapshot = SnapshotLocked();
         }

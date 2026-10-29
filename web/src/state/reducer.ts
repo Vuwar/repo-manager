@@ -277,7 +277,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, agents, agentLog };
     }
     case 'progressLoaded':
-      return { ...state, progress: newerProgress(state.progress, action.progress) };
+      // A fresh load is the truth; only live events can arrive out of order.
+      return { ...state, progress: action.progress };
     case 'progress':
       return {
         ...state,

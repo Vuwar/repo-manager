@@ -155,6 +155,19 @@ public class TownProgressTests : IDisposable
     }
 
     [Fact]
+    public void Revision_KeepsGrowingAcrossRestarts()
+    {
+        var p = New();
+        p.Answered("s1", TimeSpan.Zero);
+        p.Answered("s1", TimeSpan.Zero);
+        var before = p.Snapshot().Revision;
+        var again = New();
+        Assert.Equal(before, again.Snapshot().Revision);
+        again.Answered("s1", TimeSpan.Zero);
+        Assert.True(again.Snapshot().Revision > before);
+    }
+
+    [Fact]
     public void RemovedRepo_KeepsItsXp_NewRepoStartsAtZero()
     {
         var p = New();

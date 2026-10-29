@@ -46,7 +46,8 @@ describe('progress revisions', () => {
     s = reducer(s, { type: 'progress', progress: older, award: { kind: 'answer', amount: 20 }, at: 2 });
     expect(s.progress?.player.xp).toBe(40);
     expect(s.awards).toHaveLength(2);
+    // A fresh load from the daemon is the truth (its file may have been reset).
     s = reducer(s, { type: 'progressLoaded', progress: older });
-    expect(s.progress?.player.xp).toBe(40);
+    expect(s.progress?.player.xp).toBe(20);
   });
 });
