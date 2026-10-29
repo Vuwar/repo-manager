@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -41,13 +42,20 @@ public sealed class DaemonHost : IAsyncDisposable
     public PermissionBroker Permissions { get; } = new();
     /// <summary>Agent Town XP, saved in the data directory.</summary>
     public TownProgress Progress { get; }
+    /// <summary>Agent Town: past sessions read from Claude Code's transcripts and the desktop app's index.</summary>
+    public SessionHistory History { get; }
+    /// <summary>Agent Town: starts terminal and desktop sessions.</summary>
+    public SessionStarter Starter { get; }
 
     /// <summary>Raised when a second launch or the CLI asks to show the window.</summary>
     public event Action? ActivateRequested;
     /// <summary>Raised when the installer asks the app to exit (update in place).</summary>
     public event Action? QuitRequested;
 
-    public DaemonHost(string dataDir, int port, bool watchConfig = true, SupervisorOptions? options = null)
+    /// <param name="launch">Starts a process (tests record instead); default starts it and reports success.</param>
+    /// <param name="openLink">Opens a link with the shell (tests record instead).</param>
+    public DaemonHost(string dataDir, int port, bool watchConfig = true, SupervisorOptions? options = null,
+        Func<ProcessStartInfo, bool>? launch = null, Func<string, bool>? openLink = null)
     {
         DataDir = dataDir;
         RequestedPort = port;
@@ -65,6 +73,10 @@ public sealed class DaemonHost : IAsyncDisposable
         Agents.Changed += s => Progress.SessionChanged(s);
         Agents.Ended += Progress.Forget;
         Events = new EventHub(Supervisor, Logs, Config, Agents, Progress);
+        History = new SessionHistory(ClaudeProjectsDir(), DesktopSessionsDir(),
+            cwd => Config.InstanceForPath(cwd) is { } p ? (p.Project, p.Worktree) : null);
+        Starter = new SessionStarter(launch ?? Launch, openLink ?? WindowActivator.OpenLink, () => DateTimeOffset.Now,
+            (socket, token, text) => AgentInbox.SendAsync(socket, token, text, CancellationToken.None));
         _agentSweep = new System.Threading.Timer(_ => Agents.Sweep(AgentMaxAge), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 
@@ -143,4 +155,30 @@ public sealed class DaemonHost : IAsyncDisposable
         Logs.Dispose();
         Config.Dispose();
     }
+
+    private static bool Launch(ProcessStartInfo psi)
+    {
+        try
+        {
+            using var p = Process.Start(psi);
+            return p != null;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Claude Code's transcripts: &lt;CLAUDE_CONFIG_DIR or ~/.claude&gt;\projects.</summary>
+    private static string ClaudeProjectsDir() => Path.Combine(
+        Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") is { Length: > 0 } d
+            ? d
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude"),
+        "projects");
+
+    /// <summary>The Claude desktop app's session index (one local_*.json per desktop session).</summary>
+    private static string DesktopSessionsDir() =>
+        Environment.GetEnvironmentVariable("REPOMANAGER_CLAUDE_DESKTOP_DIR") is { Length: > 0 } d
+            ? d
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude", "claude-code-sessions");
 }

@@ -432,4 +432,112 @@ public class TownApiTests(DaemonFixture f)
         Assert.Equal("", output);
         await PostHook(HookJson("SessionEnd", id));
     }
+
+    // Past sessions and new sessions. Transcripts live in the fixture's CLAUDE_CONFIG_DIR\projects.
+
+    private string WriteTranscript(string cwd, string prompt = "fix the login")
+    {
+        var id = Guid.NewGuid().ToString();
+        var dir = Path.Combine(f.ClaudeDir, "projects", "C--demo");
+        Directory.CreateDirectory(dir);
+        File.WriteAllLines(Path.Combine(dir, id + ".jsonl"),
+        [
+            JsonSerializer.Serialize(new { type = "user", cwd, entrypoint = "cli", timestamp = DateTimeOffset.Now, message = new { role = "user", content = prompt } }),
+            JsonSerializer.Serialize(new { type = "assistant", timestamp = DateTimeOffset.Now, message = new { role = "assistant", content = new[] { new { type = "text", text = "Fixed it." } } } }),
+        ]);
+        return id;
+    }
+
+    private async Task<StartStatusDto> Start(TownStartRequest req)
+    {
+        var resp = await f.Http.PostAsJsonAsync("api/town/start", req, Protocol.Json);
+        return (await resp.Content.ReadFromJsonAsync<StartStatusDto>(Protocol.Json))!;
+    }
+
+    [Fact]
+    public async Task History_ListsFixtureTranscript_ForDemoProject()
+    {
+        var id = WriteTranscript(f.Project);
+        var list = (await f.Http.GetFromJsonAsync<List<PastSessionDto>>("api/town/history?project=demo", Protocol.Json))!;
+        var s = Assert.Single(list, s => s.Id == id);
+        Assert.Equal("terminal", s.Surface);
+
+        var page = (await f.Http.GetFromJsonAsync<TranscriptPageDto>($"api/town/history/{id}", Protocol.Json))!;
+        Assert.Equal(["fix the login", "Fixed it."], page.Entries.Select(e => e.Text));
+
+        using var handoff = JsonDocument.Parse(await f.Http.GetStringAsync($"api/town/history/{id}/handoff"));
+        Assert.StartsWith("This continues an earlier session", handoff.RootElement.GetProperty("text").GetString());
+    }
+
+    [Theory]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("not-an-id")]
+    public async Task History_Page_UnknownOrInvalidId_Is404(string id)
+    {
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await f.Http.GetAsync($"api/town/history/{id}")).StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, (await f.Http.GetAsync($"api/town/history/{id}/handoff")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Start_UnknownProject_Fails()
+    {
+        var st = await Start(new TownStartRequest { Surface = "terminal", Project = "nope" });
+        Assert.Equal("failed", st.State);
+        Assert.Empty(f.Launched.Where(p => p.WorkingDirectory == "nope"));
+    }
+
+    [Fact]
+    public async Task Start_FromSessionWithDeletedFolder_UsesProjectRoot()
+    {
+        var gone = Path.Combine(f.Project, "deleted-sub");
+        var id = WriteTranscript(gone);
+        f.Launched.Clear();
+
+        var st = await Start(new TownStartRequest { Surface = "terminal", Project = "demo", FromSessionId = id });
+
+        Assert.Equal("none", st.State);
+        var psi = Assert.Single(f.Launched);
+        Assert.Equal(["-d", f.Project, "claude"], psi.ArgumentList);
+    }
+
+    [Fact]
+    public async Task Start_FromSessionInExistingSubfolder_UsesThatFolder()
+    {
+        var sub = Path.Combine(f.Project, "web");
+        Directory.CreateDirectory(sub);
+        var id = WriteTranscript(sub);
+        f.Launched.Clear();
+
+        await Start(new TownStartRequest { Surface = "terminal", Project = "demo", FromSessionId = id });
+
+        Assert.Equal(["-d", sub, "claude"], Assert.Single(f.Launched).ArgumentList);
+    }
+
+    [Fact]
+    public async Task Start_Desktop_OpensNewLink_IgnoresText()
+    {
+        f.Links.Clear();
+        var st = await Start(new TownStartRequest { Surface = "desktop", Project = "demo", Text = "hi" });
+        Assert.Equal("none", st.State);
+        Assert.Equal([RepoManager.Core.Agents.SessionStarter.DesktopNewLink(f.Project)], f.Links);
+    }
+
+    [Fact]
+    public async Task Start_HeldPrompt_SentWhenTerminalSessionStarts()
+    {
+        var st = await Start(new TownStartRequest { Surface = "terminal", Project = "demo", Text = "continue" });
+        Assert.Equal("pending", st.State);
+
+        var id = NewId();
+        // No real pipe behind this inbox: the send fails, so the start must end failed, never stay pending.
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", id), Socket = @"\.\pipe\rm-test-none-" + id, Token = "t", Entrypoint = "cli" });
+        StartStatusDto? now = null;
+        for (var i = 0; i < 100 && now?.State is null or "pending"; i++)
+        {
+            await Task.Delay(50);
+            now = await f.Http.GetFromJsonAsync<StartStatusDto>($"api/town/start/{st.Id}", Protocol.Json);
+        }
+        Assert.Equal("failed", now!.State);
+        await PostHook(HookJson("SessionEnd", id));
+    }
 }

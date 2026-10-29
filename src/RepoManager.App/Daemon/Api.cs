@@ -268,7 +268,9 @@ public static class Api
         {
             var e = HookEventParser.Parse(env);
             if (e == null) return ActionResultDto.Fail("not a town hook event");
-            d.Agents.Apply(WithProcessStart(e));
+            var session = d.Agents.Apply(WithProcessStart(e));
+            // A terminal session started from the town gets its held first prompt through its inbox.
+            if (e.Kind == "SessionStart" && session != null) _ = d.Starter.OnSessionStart(session, d.Agents.InboxFor(session.Id));
             // The session moved on, so a prompt it showed in its own window was answered there. Not on Notification:
             // Claude Code reports the dialog it just opened for that same prompt.
             if (e.Kind is not ("PermissionRequest" or "Notification")) d.Permissions.ClearSession(e.SessionId);
@@ -340,6 +342,34 @@ public static class Api
         });
 
         api.MapGet("/town/sessions", () => d.Agents.Snapshot());
+
+        api.MapGet("/town/history", (string project) =>
+            d.History.List(project, d.Agents.Snapshot().Select(s => s.Id).ToHashSet(StringComparer.OrdinalIgnoreCase)));
+
+        api.MapGet("/town/history/{id}", (string id, int? before) =>
+            d.History.Page(id, before) is { } page ? Results.Ok(page) : Results.NotFound());
+
+        api.MapGet("/town/history/{id}/handoff", (string id) =>
+            d.History.Handoff(id) is { } text ? Results.Ok(new { text }) : Results.NotFound());
+
+        api.MapPost("/town/start", (TownStartRequest req) =>
+        {
+            var failed = (string m) => new StartStatusDto { Id = "", State = "failed", Message = m };
+            if (d.Config.FindInstance(Ids.Instance(req.Project, req.Worktree)) is not { } instance) return failed("unknown project");
+            // A past session's folder when it still exists and still belongs to this project, else the project root.
+            var folder = instance.Root;
+            if (req.FromSessionId != null && d.History.Find(req.FromSessionId) is { } past && Directory.Exists(past.Cwd)
+                && d.Config.InstanceForPath(past.Cwd)?.Project is { } p && string.Equals(p, req.Project, StringComparison.OrdinalIgnoreCase))
+                folder = past.Cwd;
+            if (req.Surface == "desktop")
+            {
+                var r = d.Starter.StartDesktop(folder);
+                return r.Ok ? new StartStatusDto { Id = "", State = "none", Message = r.Message } : failed(r.Error ?? "could not open Claude");
+            }
+            return req.Surface == "terminal" ? d.Starter.StartTerminal(folder, req.Text) : failed("unknown surface");
+        });
+
+        api.MapGet("/town/start/{id}", (string id) => d.Starter.Status(id));
     }
 
     /// <summary>

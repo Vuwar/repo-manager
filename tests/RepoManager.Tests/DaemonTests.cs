@@ -19,6 +19,9 @@ public sealed class DaemonFixture : IAsyncLifetime
     public int ApiPort { get; } = TestEnv.FreePort();
     public DaemonHost Host { get; private set; } = null!;
     public HttpClient Http { get; private set; } = null!;
+    /// <summary>Terminals and links the town would have opened: tests never open real windows.</summary>
+    public List<System.Diagnostics.ProcessStartInfo> Launched { get; } = [];
+    public List<string> Links { get; } = [];
 
     public async Task InitializeAsync()
     {
@@ -41,7 +44,10 @@ public sealed class DaemonFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("CLAUDE_CONFIG_DIR", ClaudeDir);
         Environment.SetEnvironmentVariable("REPOMANAGER_DEVM", CliTests.DevmExe);
         Environment.SetEnvironmentVariable("REPOMANAGER_HOME", Home);
-        Host = new DaemonHost(Home, 0, watchConfig: false, Harness.FastOptions);
+        Environment.SetEnvironmentVariable("REPOMANAGER_CLAUDE_DESKTOP_DIR", Path.Combine(Home, "desktop"));
+        Host = new DaemonHost(Home, 0, watchConfig: false, Harness.FastOptions,
+            launch: psi => { lock (Launched) Launched.Add(psi); return true; },
+            openLink: link => { lock (Links) Links.Add(link); return true; });
         await Host.StartAsync();
         Http = Client(Host.Token);
     }
