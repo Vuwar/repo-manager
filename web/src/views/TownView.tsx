@@ -37,10 +37,9 @@ const CLICK_SLOP_PX = 4;
 /** Where the boss starts and where Home sends it (scene px), and its movement tick. */
 const BOSS_HOME = 20;
 const BOSS_TICK_MS = 16;
-/** XP pop-ups: how long they show, and where (scene y above the boss's head; the stage starts below the top bar). */
+/** XP pop-ups: how long they show, and where (scene y above the boss's head). */
 const POPUP_MS = 1500;
 const BOSS_POPUP_Y = 140;
-const TOP_BAR_PX = 32;
 
 const swatch = (g: LotGroup) => (g === 'none' ? NO_SESSION_COLOR : STATE_COLOR[g]);
 
@@ -117,7 +116,12 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   const [camRaw, setCam] = useState(0);
   const camX = clampCamera(camRaw, world, viewW);
   const pan = (dx: number) => setCam((c) => clampCamera(c + dx, world, viewW));
-  const jump = (index: number) => setCam(cameraToShow(index, world, viewW));
+  // A jump (minimap, edge arrow) brings the boss along, so Enter talks there without walking.
+  const jump = (index: number) => {
+    setCam(cameraToShow(index, world, viewW));
+    boss.current = { x: lotX(index) + BW / 2, target: null };
+    setBossX(boss.current.x);
+  };
   const home = () => {
     setCam(0);
     setShown(wanted);
@@ -132,9 +136,11 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   const bossTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geometry = useRef({ world, viewW });
   geometry.current = { world, viewW };
-  const moveBoss = (b: Boss) => {
+  /** The camera follows only a boss walked by the arrow keys; one running to a clicked worker leaves it alone. */
+  const moveBoss = (b: Boss, follow = held.current !== 0) => {
     boss.current = b;
     setBossX(b.x);
+    if (!follow) return;
     const g = geometry.current;
     setCam((c) => followCamera(clampCamera(c, g.world, g.viewW), b.x, g.viewW, g.world));
   };
@@ -181,15 +187,18 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   };
   // XP pop-ups: each new award floats above the boss for POPUP_MS; answering or sending plays the reward.
   const awards = useAppState((s) => s.awards);
-  const seenAwards = useRef(new Set(awards));
+  const seenAwards = useRef(new WeakSet<object>(awards));
   const [popups, setPopups] = useState<{ key: number; text: string }[]>([]);
   const popupSeq = useRef(0);
-  const soundOn = useRef(true);
-  soundOn.current = settings?.sound ?? true;
+  // Silent until the settings say otherwise, so an award arriving first never plays with Sounds off.
+  const soundOn = useRef(false);
+  soundOn.current = settings?.sound ?? false;
   useEffect(() => {
     for (const a of awards) {
       if (seenAwards.current.has(a)) continue;
       seenAwards.current.add(a);
+      // Repo XP is the repo's, not the player's: no pop-up over the boss for a finished turn.
+      if (a.kind === 'turn') continue;
       const key = ++popupSeq.current;
       setPopups((p) => [...p, { key, text: `+${a.amount} XP` }]);
       setTimeout(() => setPopups((p) => p.filter((x) => x.key !== key)), POPUP_MS);
@@ -251,6 +260,8 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
         held.current = e.key === 'ArrowLeft' ? -1 : 1;
         k.runBoss();
       } else if (e.key === 'Enter' && !k.boxOpen && !k.questsOpen) {
+        // A focused button keeps its Enter.
+        if ((e.target as Element | null)?.closest?.('button, a, [role="button"], [role="menuitem"]')) return;
         if (!k.talkNearBoss()) return;
       } else if (e.key === 'Home') k.home();
       else if (e.key === 'F11') postFullscreen();
@@ -265,12 +276,14 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       else return;
       e.preventDefault();
     };
+    const onBlur = () => (held.current = 0);
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onUp);
-    window.addEventListener('blur', () => (held.current = 0));
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, []);
 
@@ -297,8 +310,12 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     if (hit) {
       // The box opens at once; the boss runs over in the background.
       talkTo(hit.session.id);
-      boss.current = { ...boss.current, target: workerSpot(hit.lot, hit.index, hit.session.state)[0] - 10 };
-      runBoss();
+      const target = workerSpot(hit.lot, hit.index, hit.session.state)[0] - 10;
+      if (prefersReducedMotion()) moveBoss({ x: target, target: null }, false);
+      else {
+        boss.current = { ...boss.current, target };
+        runBoss();
+      }
     }
   };
   const onPointerEnter = () => {
@@ -416,17 +433,17 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
             ];
           }),
         )}
+        {popups.map((p, i) => (
+          <span key={p.key} className="town-xp" style={{ left: toPx(bossX), top: (BOSS_POPUP_Y - i * 8) * zoom }}>
+            {p.text}
+          </span>
+        ))}
         {hints.map((h) => (
           <button key={h.side} type="button" className={`town-edge town-edge-${h.side}`} style={{ ['--c' as string]: swatch(h.group) }} onClick={() => jump(h.target)}>
             {edgeText(h)}
           </button>
         ))}
       </div>
-      {popups.map((p, i) => (
-        <span key={p.key} className="town-xp" style={{ left: toPx(bossX), top: (BOSS_POPUP_Y - i * 8) * zoom + TOP_BAR_PX }}>
-          {p.text}
-        </span>
-      ))}
       <nav className="town-minimap" aria-label="Minimap">
         {lots.length > 0 && (
           <span

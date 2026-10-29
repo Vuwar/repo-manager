@@ -27,6 +27,8 @@ export function reward(): void {
     const Ctor = (window as unknown as { AudioContext?: new () => AudioContext }).AudioContext;
     if (!Ctor) return;
     shared ??= new Ctor();
+    // Chromium may start a context suspended until the page has had a user gesture.
+    if (shared.state === 'suspended') void shared.resume();
     playReward(shared);
   } catch {
     /* no audio device: the pop-up is enough */

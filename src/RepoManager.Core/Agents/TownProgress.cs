@@ -13,6 +13,8 @@ public sealed class TownProgress
     public const int AnswerXp = 10, FastAnswerBonus = 10, SendXp = 5, TurnXp = 10;
     public static readonly TimeSpan FastAnswer = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan SendWindow = TimeSpan.FromMinutes(2);
+    /// <summary>XP is clamped to 0..MaxXp, so a hand-edited file cannot overflow the level maths.</summary>
+    public const int MaxXp = 1_000_000;
 
     private sealed class FileShape
     {
@@ -40,12 +42,13 @@ public sealed class TownProgress
     /// <summary>Level n starts at 25·(n−1)·n XP: 0, 50, 150, 300, 500…</summary>
     public static LevelDto LevelOf(int xp)
     {
+        xp = Math.Clamp(xp, 0, MaxXp);
         var level = 1;
         while (Start(level + 1) <= xp) level++;
-        return new LevelDto(xp, level, Start(level), Start(level + 1));
+        return new LevelDto(xp, level, (int)Start(level), (int)Start(level + 1));
     }
 
-    private static int Start(int level) => 25 * (level - 1) * level;
+    private static long Start(int level) => 25L * (level - 1) * level;
 
     /// <summary>The user answered a prompt from the town, <paramref name="promptAge"/> after it appeared.</summary>
     public XpAwardDto? Answered(string sessionId, TimeSpan promptAge) =>
@@ -54,7 +57,9 @@ public sealed class TownProgress
     /// <summary>A town message reached the session; if it gets the session working soon, that earns XP.</summary>
     public void Sent(string sessionId)
     {
-        lock (_gate) _sent[sessionId] = _clock();
+        // Only a message that can start a turn counts: one read mid-turn does not get the session working.
+        lock (_gate)
+            if (_lastState.GetValueOrDefault(sessionId) != "working") _sent[sessionId] = _clock();
     }
 
     /// <summary>Feed every session change: awards a finished turn to its repo, and a town message that got it working.</summary>
@@ -96,8 +101,8 @@ public sealed class TownProgress
         TownProgressDto snapshot;
         lock (_gate)
         {
-            if (repo != null) _data.Repos[repo] = _data.Repos.GetValueOrDefault(repo) + award.Amount;
-            else _data.Player += award.Amount;
+            if (repo != null) _data.Repos[repo] = Math.Min(MaxXp, _data.Repos.GetValueOrDefault(repo) + award.Amount);
+            else _data.Player = Math.Min(MaxXp, _data.Player + award.Amount);
             Save();
             snapshot = SnapshotLocked();
         }
@@ -126,7 +131,8 @@ public sealed class TownProgress
         {
             if (!File.Exists(path)) return new FileShape();
             var data = JsonSerializer.Deserialize<FileShape>(File.ReadAllText(path), Protocol.Json) ?? new FileShape();
-            data.Repos = new Dictionary<string, int>(data.Repos ?? [], StringComparer.OrdinalIgnoreCase);
+            data.Player = Math.Clamp(data.Player, 0, MaxXp);
+            data.Repos = (data.Repos ?? []).ToDictionary(p => p.Key, p => Math.Clamp(p.Value, 0, MaxXp), StringComparer.OrdinalIgnoreCase);
             return data;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)

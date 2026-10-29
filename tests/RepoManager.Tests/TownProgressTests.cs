@@ -107,6 +107,29 @@ public class TownProgressTests : IDisposable
     }
 
     [Fact]
+    public void HugeXpInAnEditedFile_IsClamped_AndNeverHangs()
+    {
+        File.WriteAllText(Path.Combine(_dir, TownProgress.FileName), "{\"player\":2147483647,\"repos\":{\"kodex\":-5}}");
+        var task = Task.Run(() => New().Snapshot());
+        Assert.True(task.Wait(TimeSpan.FromSeconds(5)), "loading hung");
+        Assert.Equal(TownProgress.MaxXp, task.Result.Player.Xp);
+        Assert.Equal(0, task.Result.Repos["kodex"].Xp);
+        Assert.True(Task.Run(() => TownProgress.LevelOf(int.MaxValue)).Wait(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void Sent_WhileAlreadyWorking_DoesNotPayForALaterPrompt()
+    {
+        var p = New();
+        p.SessionChanged(S("s1", "working"));
+        p.Sent("s1");
+        p.SessionChanged(S("s1", "done"));
+        _now += TimeSpan.FromSeconds(30);
+        // The next prompt is typed in the terminal, not sent from the town.
+        Assert.Null(p.SessionChanged(S("s1", "working")));
+    }
+
+    [Fact]
     public void RemovedRepo_KeepsItsXp_NewRepoStartsAtZero()
     {
         var p = New();

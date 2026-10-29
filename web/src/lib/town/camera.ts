@@ -10,8 +10,7 @@ export const SMALL_BW = 28;
 /** Lot labels sit on the grass below the road, clear of the workers. */
 export const LABEL_Y = 171;
 
-/** Logical pixels per arrow-key press, and per wheel delta unit. */
-export const ARROW_PAN = 24;
+/** Logical pixels per wheel delta unit. */
 export const WHEEL_FACTOR = 0.5;
 
 /** Left edge of lot `index`'s building. */

@@ -171,6 +171,23 @@ describe('TownView', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('ALPHA · Session A');
   });
 
+  it('Enter on a focused button presses the button, not a worker', () => {
+    setup(undefined, [agent('e1', { project: 'alpha', state: 'idle' })]);
+    const leave = screen.getByRole('button', { name: 'Leave town' });
+    leave.focus();
+    expect(fireEvent.keyDown(leave, { key: 'Enter' })).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a minimap jump brings the boss along, so Enter talks there without walking', () => {
+    const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+    const waiting = Array.from({ length: 30 }, (_, i) => agent('w' + i, { project: 'p' + String(i).padStart(2, '0'), state: 'idle' }));
+    setup(projects, waiting);
+    fireEvent.click(screen.getByRole('button', { name: 'Go to p25' }));
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('P25 · Session A');
+  });
+
   it('Enter far from any worker does nothing', () => {
     vi.useFakeTimers();
     setup(undefined, [agent('e1', { project: 'gamma', state: 'idle' })]);
@@ -262,6 +279,52 @@ describe('TownView', () => {
       const before = bossX();
       act(() => vi.advanceTimersByTime(3000));
       expect(bossX()).toBeGreaterThan(before);
+    });
+
+    it('after panning away, clicking a worker there keeps the camera there', () => {
+      vi.useFakeTimers();
+      const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
+      setup(projects, Array.from({ length: 12 }, (_, i) => agent('k' + i, { project: 'p' + String(i).padStart(2, '0'), state: 'idle' })));
+      // Drag the street left by 300 scene px (zoom 3), away from the boss at the left end.
+      const stage = document.querySelector('.town-stage')!;
+      fireEvent.pointerDown(stage, { button: 0, pointerId: 1, clientX: 900, clientY: 100 });
+      fireEvent.pointerMove(stage, { pointerId: 1, clientX: 0, clientY: 100 });
+      fireEvent.pointerUp(stage, { button: 0, pointerId: 1, clientX: 0, clientY: 100 });
+      const shown = labels();
+      expect(shown).not.toContain('p00');
+      const [x, y] = workerSpot(8, 0, 'idle');
+      fireEvent.pointerDown(stage, { button: 0, pointerId: 2, clientX: (x - 300) * 3, clientY: (y - 6) * 3 });
+      fireEvent.pointerUp(stage, { button: 0, pointerId: 2, clientX: (x - 300) * 3, clientY: (y - 6) * 3 });
+      expect(dialog()?.getAttribute('aria-label')).toBe('P08 · Session A');
+      act(() => vi.advanceTimersByTime(500));
+      expect(labels()).toEqual(shown);
+    });
+
+    it('with reduced motion the boss is at the clicked worker at once', () => {
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce'), addEventListener: () => {}, removeEventListener: () => {} }));
+      setup(undefined, [agent('far', { project: 'alpha', state: 'done' }), agent('x', { project: 'gamma', state: 'idle' })]);
+      clickWorker(1, 0, 'idle');
+      expect(bossX()).toBe(Math.round(workerSpot(1, 0, 'idle')[0] - 10));
+      vi.unstubAllGlobals();
+    });
+
+    it('a repo turn shows no pop-up over the boss (that XP is the repo\'s)', () => {
+      setup();
+      const progress = { player: { xp: 0, level: 1, levelStart: 0, nextLevel: 50 }, repos: {} };
+      act(() => dispatch({ type: 'progress', progress, award: { kind: 'turn', amount: 10, sessionId: 's', repo: 'alpha' }, at: Date.now() }));
+      expect(screen.queryByText('+10 XP')).toBeNull();
+    });
+
+    it('arrows do not move the boss while typing in the box', () => {
+      vi.useFakeTimers();
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'done', canSend: true })]);
+      clickWorker(0, 0, 'done');
+      act(() => vi.advanceTimersByTime(2000));
+      const before = bossX();
+      const box = screen.getByRole('textbox', { name: 'Message' });
+      fireEvent.keyDown(box, { key: 'ArrowRight' });
+      act(() => vi.advanceTimersByTime(1000));
+      expect(bossX()).toBe(before);
     });
 
     it('a drag does not open a dialogue', () => {
