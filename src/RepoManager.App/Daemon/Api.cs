@@ -268,9 +268,12 @@ public static class Api
         {
             var e = HookEventParser.Parse(env);
             if (e == null) return ActionResultDto.Fail("not a town hook event");
+            var known = d.Agents.Get(e.SessionId) != null;
             var session = d.Agents.Apply(WithProcessStart(e));
-            // A terminal session started from the town gets its held first prompt through its inbox.
-            if (e.Kind == "SessionStart" && session != null) _ = d.Starter.OnSessionStart(session, d.Agents.InboxFor(session.Id));
+            // A terminal session started from the town gets its held first prompt through its inbox. Only a brand-new
+            // session: an open one also fires SessionStart when it clears, compacts or is resumed.
+            if (e is { Kind: "SessionStart", Source: "startup" } && !known && session != null)
+                _ = d.Starter.OnSessionStart(session, d.Agents.InboxFor(session.Id));
             // The session moved on, so a prompt it showed in its own window was answered there. Not on Notification:
             // Claude Code reports the dialog it just opened for that same prompt.
             if (e.Kind is not ("PermissionRequest" or "Notification")) d.Permissions.ClearSession(e.SessionId);

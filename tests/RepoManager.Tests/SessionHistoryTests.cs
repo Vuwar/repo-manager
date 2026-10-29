@@ -268,4 +268,88 @@ public class SessionHistoryTests : IDisposable
         Assert.Equal(["p", "a"], page.Entries.Select(e => e.Text));
         Assert.Single(History().List("demo", NoLive));
     }
+
+    [Fact]
+    public void NotificationsCommandsAndReminders_AreNotUserPrompts()
+    {
+        var id = NewId();
+        var note = JsonSerializer.Serialize(new { type = "user", cwd = Demo, entrypoint = "cli", timestamp = T0, origin = new { kind = "task-notification" }, message = new { role = "user", content = "agent finished" } });
+        WriteTranscript(id,
+            User("<command-name>/clear</command-name>", Demo, T0),
+            User("<local-command-stdout></local-command-stdout>", Demo, T0),
+            User("real prompt", Demo, T0.AddMinutes(1)),
+            note,
+            User("<task-notification><task-id>x</task-id></task-notification>", Demo, T0),
+            User("<system-reminder>hi</system-reminder>", Demo, T0),
+            User("<command-message>x</command-message>", Demo, T0),
+            Assistant("reply", T0));
+        var h = History();
+
+        Assert.Equal(["real prompt", "reply"], h.Page(id, null)!.Entries.Select(e => e.Text));
+        var s = Assert.Single(h.List("demo", NoLive));
+        Assert.Equal("real prompt", s.Title);
+        Assert.Equal(T0.AddMinutes(1), s.Started);
+    }
+
+    [Fact]
+    public void HugeFirstPromptLine_IsStillTheFirstPrompt()
+    {
+        var id = NewId();
+        var image = JsonSerializer.Serialize(new
+        {
+            type = "user", cwd = Demo, entrypoint = "cli", timestamp = T0,
+            message = new { role = "user", content = new object[] { new { type = "image", source = new { data = new string('A', 200_000) } }, new { type = "text", text = "look at this" } } },
+        });
+        var pad = JsonSerializer.Serialize(new { type = "progress", data = new string('x', 1000) });
+        var lines = new List<string> { image };
+        lines.AddRange(Enumerable.Repeat(pad, 300));
+        WriteTranscript(id, [.. lines]);
+
+        var s = Assert.Single(History().List("demo", NoLive));
+        Assert.Equal("look at this", s.Title);
+        Assert.Equal(T0, s.Started);
+    }
+
+    [Fact]
+    public void Page_LargeTranscript_DoesNotHoldTheWholeFileAtOnce()
+    {
+        var id = NewId();
+        var pad = JsonSerializer.Serialize(new { type = "progress", data = new string('x', 1000) });
+        var lines = new List<string> { User("p", Demo, T0) };
+        lines.AddRange(Enumerable.Repeat(pad, 20_000));
+        lines.Add(Assistant("end", T0));
+        var path = WriteTranscript(id, [.. lines]);
+        var size = new FileInfo(path).Length;
+        var h = History();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var page = h.Page(id, null)!;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal("end", page.Entries[^1].Text);
+        Assert.True(allocated < 3 * size, $"allocated {allocated / 1024} KB for a {size / 1024} KB file");
+    }
+
+    [Fact]
+    public void BadDesktopIndexTime_SkipsThatFileOnly()
+    {
+        var id = NewId();
+        WriteTranscript(id, User("p", Demo, T0));
+        var dir = Path.Combine(Desktop, "acct", "org");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "local_bad.json"), $"{{\"sessionId\":\"local_bad\",\"cliSessionId\":\"{id}\",\"lastActivityAt\":99999999999999999}}");
+
+        var s = Assert.Single(History().List("demo", NoLive));
+        Assert.Equal("terminal", s.Surface);
+    }
+
+    [Theory]
+    [InlineData("sdk-ts", "terminal")]
+    [InlineData("claude-vscode", "terminal")]
+    [InlineData("claude-desktop-3p", "desktop")]
+    public void SurfaceWithoutIndex_IsDesktopOnlyForDesktopEntrypoints(string entrypoint, string surface)
+    {
+        WriteTranscript(NewId(), User("p", Demo, T0, entrypoint: entrypoint));
+        Assert.Equal(surface, Assert.Single(History().List("demo", NoLive)).Surface);
+    }
 }

@@ -23,7 +23,9 @@ public sealed record AgentHookEvent(
     DateTime? ClaudeStarted = null,
     string? TranscriptPath = null,
     string? TranscriptTitle = null,
-    string? LastTurn = null);
+    string? LastTurn = null,
+    /// <summary>SessionStart only: startup, resume, clear or compact.</summary>
+    string? Source = null);
 
 public static class HookEventParser
 {
@@ -61,7 +63,8 @@ public static class HookEventParser
                 Surface: SurfaceFor(env.Entrypoint),
                 HostSessionId: env.HostSessionId,
                 ClaudePid: env.ClaudePid is > 0 ? env.ClaudePid : null,
-                TranscriptPath: Str(root, "transcript_path"));
+                TranscriptPath: Str(root, "transcript_path"),
+                Source: Str(root, "source"));
         }
         catch (JsonException)
         {

@@ -16,6 +16,8 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
     public const int PageSize = 150;
     public const int HandoffMax = 4000;
     private const int EdgeBytes = 64 * 1024;
+    /// <summary>How far the list reads from the start looking for the first prompt.</summary>
+    private const int HeadMax = 8 * 1024 * 1024;
     private const int HandoffPrompts = 15;
     private const int PromptMax = 200;
     private const int ReplyMax = 1500;
@@ -130,7 +132,7 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
             Project = place?.Project,
             Worktree = place?.Worktree,
             Title = ix?.Title is { Length: > 0 } t ? t : s.Title ?? AgentRegistry.Clip(OneLine(s.FirstPrompt), AgentRegistry.TitleMax),
-            Surface = ix != null || s.Entrypoint is not (null or "cli") ? "desktop" : "terminal",
+            Surface = ix != null || s.Entrypoint?.StartsWith("claude-desktop", StringComparison.Ordinal) == true ? "desktop" : "terminal",
             HostSessionId = ix?.HostId,
             Archived = ix?.Archived ?? false,
             Started = s.Started,
@@ -163,7 +165,7 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
                 var archived = e.TryGetProperty("isArchived", out var a) && a.ValueKind == JsonValueKind.True;
                 map[cli] = new IndexEntry(host, TranscriptReader.Str(e, "title"), archived, last);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentOutOfRangeException) { }
         }
         return map;
     }
@@ -185,31 +187,10 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
 
     private Summary? Summarize(string path, FileInfo info)
     {
-        string head, tail;
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var len = fs.Length;
-            if (len <= 2 * EdgeBytes)
-            {
-                head = ReadAt(fs, 0, (int)len);
-                tail = "";
-            }
-            else
-            {
-                head = ReadAt(fs, 0, EdgeBytes);
-                head = head[..(head.LastIndexOf('\n') + 1)];
-                tail = ReadAt(fs, len - EdgeBytes, EdgeBytes);
-                tail = tail[(tail.IndexOf('\n') + 1)..];
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
-
         string? cwd = null, entrypoint = null, firstPrompt = null, custom = null, agent = null, ai = null;
         DateTimeOffset? started = null, last = null;
-        foreach (var line in Lines(head).Concat(Lines(tail)))
+        void See(JsonElement e)
         {
-            var e = line.RootElement;
             switch (TranscriptReader.Str(e, "type"))
             {
                 case "custom-title": custom = TranscriptReader.Str(e, "customTitle") ?? custom; break;
@@ -223,20 +204,41 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
                     break;
             }
             if (Time(e) is { } t) last = t;
-            line.Dispose();
         }
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var len = fs.Length;
+            using var reader = new StreamReader(fs, Encoding.UTF8, false, 16 * 1024, leaveOpen: true);
+            // From the start up to the first typed prompt (a pasted image makes that line long), then the last
+            // EdgeBytes for later titles and the last activity. A small file is read whole.
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                Parse(line, See);
+                if (len > 2 * EdgeBytes && (firstPrompt != null || fs.Position > HeadMax)) break;
+            }
+            var read = fs.Position;
+            if (line != null)
+            {
+                if (len - EdgeBytes > fs.Position)
+                {
+                    read += EdgeBytes;
+                    fs.Seek(len - EdgeBytes, SeekOrigin.Begin);
+                    reader.DiscardBufferedData();
+                    reader.ReadLine(); // starts mid-line
+                }
+                else read = len;
+                while ((line = reader.ReadLine()) != null) Parse(line, See);
+            }
+            Interlocked.Add(ref _bytesRead, read);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+
         if (firstPrompt == null || cwd == null) return null;
         var mtime = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
         return new Summary(Path.GetFileNameWithoutExtension(path), path, cwd, entrypoint, custom ?? agent ?? ai, firstPrompt, started ?? mtime, last ?? mtime);
-    }
-
-    private string ReadAt(FileStream fs, long offset, int count)
-    {
-        fs.Seek(offset, SeekOrigin.Begin);
-        var bytes = new byte[count];
-        fs.ReadExactly(bytes);
-        Interlocked.Add(ref _bytesRead, count);
-        return Encoding.UTF8.GetString(bytes);
     }
 
     private List<TranscriptEntryDto>? EntriesOf(string path)
@@ -247,13 +249,14 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
             {
                 var info = new FileInfo(path);
                 if (_lastEntries is { } c && c.Path == path && c.Size == info.Length && c.Mtime == info.LastWriteTimeUtc) return c.Entries;
-                string text;
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                    text = ReadAt(fs, 0, (int)fs.Length);
                 var entries = new List<TranscriptEntryDto>();
-                foreach (var line in Lines(text))
+                // Line by line: a transcript can be hundreds of MB, and the daemon always runs.
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(fs, Encoding.UTF8, false, 64 * 1024))
                 {
-                    using (line) AddEntries(line.RootElement, entries);
+                    string? line;
+                    while ((line = reader.ReadLine()) != null) Parse(line, e => AddEntries(e, entries));
+                    Interlocked.Add(ref _bytesRead, fs.Length);
                 }
                 _lastEntries = (path, info.Length, info.LastWriteTimeUtc, entries);
                 return entries;
@@ -300,8 +303,12 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
     /// <summary>A prompt the user typed in the main session: not a tool result, a subagent's or a meta line.</summary>
     private static bool IsUserPrompt(JsonElement e) =>
         !Sidechain(e) && !(e.TryGetProperty("isMeta", out var meta) && meta.ValueKind == JsonValueKind.True)
+        && !(e.TryGetProperty("origin", out var origin) && TranscriptReader.Str(origin, "kind") == "task-notification")
         && e.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.Object && TranscriptReader.IsPrompt(e)
-        && PromptText(e).Length > 0;
+        && PromptText(e) is { Length: > 0 } text && !NotTyped.Any(p => text.StartsWith(p, StringComparison.Ordinal));
+
+    /// <summary>User lines Claude Code writes itself: slash commands and their output, task notifications, reminders.</summary>
+    private static readonly string[] NotTyped = ["<command-name>", "<command-message>", "<local-command-", "<task-notification>", "<system-reminder>"];
 
     private static string PromptText(JsonElement e)
     {
@@ -313,17 +320,14 @@ public sealed partial class SessionHistory(string projectsDir, string desktopDir
     private static DateTimeOffset? Time(JsonElement e) =>
         TranscriptReader.Str(e, "timestamp") is { } s && DateTimeOffset.TryParse(s, out var t) ? t : null;
 
-    /// <summary>Each line that parses as a JSON object; the caller disposes it.</summary>
-    private static IEnumerable<JsonDocument> Lines(string text)
+    /// <summary>Calls <paramref name="see"/> with the line when it parses as a JSON object; anything else is skipped.</summary>
+    private static void Parse(string line, Action<JsonElement> see)
     {
-        foreach (var line in text.Split('\n'))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            JsonDocument doc;
-            try { doc = JsonDocument.Parse(line); }
-            catch (JsonException) { continue; }
-            if (doc.RootElement.ValueKind == JsonValueKind.Object) yield return doc;
-            else doc.Dispose();
-        }
+        if (string.IsNullOrWhiteSpace(line)) return;
+        JsonDocument doc;
+        try { doc = JsonDocument.Parse(line); }
+        catch (JsonException) { return; }
+        using (doc)
+            if (doc.RootElement.ValueKind == JsonValueKind.Object) see(doc.RootElement);
     }
 }

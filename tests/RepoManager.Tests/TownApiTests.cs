@@ -530,7 +530,7 @@ public class TownApiTests(DaemonFixture f)
 
         var id = NewId();
         // No real pipe behind this inbox: the send fails, so the start must end failed, never stay pending.
-        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", id), Socket = @"\.\pipe\rm-test-none-" + id, Token = "t", Entrypoint = "cli" });
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", id, extra: "\"source\":\"startup\""), Socket = @"\\.\pipe\rm-test-none-" + id, Token = "t", Entrypoint = "cli" });
         StartStatusDto? now = null;
         for (var i = 0; i < 100 && now?.State is null or "pending"; i++)
         {
@@ -548,5 +548,25 @@ public class TownApiTests(DaemonFixture f)
         var st = await Start(new TownStartRequest { Surface = "terminal", Project = "demo", Worktree = "gone-wt" });
         Assert.Equal("none", st.State);
         Assert.Equal(["-d", f.Project, "claude"], Assert.Single(f.Launched).ArgumentList);
+    }
+
+    [Fact]
+    public async Task Start_HeldPrompt_NotTakenByResumedClearedOrKnownSessions()
+    {
+        var known = NewId();
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("UserPromptSubmit", known, extra: "\"prompt\":\"hi\""), Entrypoint = "cli" });
+        var st = await Start(new TownStartRequest { Surface = "terminal", Project = "demo", Text = "continue" });
+        var resumed = NewId();
+
+        // No inbox: a wrongly matched session would mark the start failed at once.
+        // An open session that clears or compacts, a resumed one, and a known one starting again: none is the new window.
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", known, extra: "\"source\":\"clear\""), Entrypoint = "cli" });
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", known, extra: "\"source\":\"startup\""), Entrypoint = "cli" });
+        await f.Post("api/town/hook", new TownHookEnvelope { Json = HookJson("SessionStart", resumed, extra: "\"source\":\"resume\""), Entrypoint = "cli" });
+        await Task.Delay(300);
+
+        Assert.Equal("pending", (await f.Http.GetFromJsonAsync<StartStatusDto>($"api/town/start/{st.Id}", Protocol.Json))!.State);
+        await PostHook(HookJson("SessionEnd", known));
+        await PostHook(HookJson("SessionEnd", resumed));
     }
 }
