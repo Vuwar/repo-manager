@@ -260,6 +260,16 @@ public class AgentRegistryTests
     }
 
     [Fact]
+    public void AttentionTarget_OnlyForSessionsStillThere()
+    {
+        _reg.Apply(Ev("SessionStart"));
+        Assert.Equal("s1", AttentionTarget.For("s1", _reg));
+        _reg.Apply(Ev("SessionEnd"));
+        Assert.Null(AttentionTarget.For("s1", _reg));
+        Assert.Null(AttentionTarget.For(null, _reg));
+    }
+
+    [Fact]
     public void Token_NeverInDto()
     {
         _reg.Apply(Ev("SessionStart", socket: @"\\.\pipe\x", token: "secret-token-123"));

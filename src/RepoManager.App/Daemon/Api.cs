@@ -308,20 +308,7 @@ public static class Api
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
 
-        api.MapPost("/town/open", (TownOpenRequest req) =>
-        {
-            if (string.IsNullOrEmpty(req.SessionId) || d.Agents.Get(req.SessionId) is not { } session) return ActionResultDto.Fail("unknown session");
-            if (session.Surface == "desktop" && WindowActivator.DesktopLink(session.HostSessionId) is { } link && WindowActivator.OpenLink(link))
-                return ActionResultDto.Success("opened in Claude");
-            if (d.Agents.ProcessFor(req.SessionId) is not { } pid)
-                return ActionResultDto.Fail("RepoManager could not find this session's window");
-            // A pid of a process that ended may already belong to another program.
-            var started = ProcessTree.StartTime(pid);
-            if (started is null || started != d.Agents.ProcessStarted(req.SessionId))
-                return ActionResultDto.Fail("this session's Claude process is no longer running");
-            var (ok, message) = WindowActivator.Activate(pid);
-            return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
-        });
+        api.MapPost("/town/open", (TownOpenRequest req) => AgentWindows.Open(d, req.SessionId));
 
         api.MapPost("/town/open-host", (TownOpenHostRequest req) =>
             WindowActivator.DesktopLink(req.HostSessionId) is { } link && WindowActivator.OpenLink(link)

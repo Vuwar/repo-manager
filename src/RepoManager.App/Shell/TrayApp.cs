@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using RepoManager.App.Daemon;
+using System.Media;
 using RepoManager.Contracts;
+using RepoManager.Core.Agents;
 using RepoManager.Core.Processes;
 
 namespace RepoManager.App.Shell;
@@ -15,6 +17,15 @@ public sealed class TrayApp : ApplicationContext
     private MainForm? _window;
     private string _lastStatus = "";
     private bool _quitting;
+
+    // Agent Town attention: the tracker decides, this class shows it.
+    private readonly AttentionTracker _attention = new(() => DateTimeOffset.Now);
+    private readonly System.Windows.Forms.Timer _blink = new() { Interval = 500 };
+    private bool _blinkOn;
+    private bool _blinking;
+    private bool _doneBadge;
+    private string? _noticeSession;
+    private SoundPlayer? _player;
 
     public TrayApp(DaemonHost host, bool showWindow)
     {
@@ -32,11 +43,19 @@ public sealed class TrayApp : ApplicationContext
         };
         _tray.ContextMenuStrip.Opening += (_, e) => { BuildMenu(); e.Cancel = false; };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
-        _tray.BalloonTipClicked += (_, _) => ShowWindow();
+        _tray.BalloonTipClicked += (_, _) => OnNoticeClicked();
 
         host.Events.StatusChanged += _ => OnUi(UpdateIcon);
         host.Supervisor.Notified += n => OnUi(() => ShowNotification(n));
         host.ActivateRequested += () => OnUi(ShowWindow);
+        host.Agents.Changed += s => OnUi(() => Apply(_attention.OnSession(s, host.Permissions.Focused, TownSettings())));
+        host.Agents.Ended += id => OnUi(() => Apply(_attention.OnEnded(id, host.Permissions.Focused, TownSettings())));
+        host.Permissions.FocusChanged += f => OnUi(() => Apply(_attention.OnFocus(f, TownSettings())));
+        _blink.Tick += (_, _) =>
+        {
+            _blinkOn = !_blinkOn;
+            UpdateIcon();
+        };
         host.QuitRequested += () => OnUi(() => Quit(confirm: false));
 
         // Fallback refresh: config reloads and health changes also change the icon.
@@ -85,19 +104,71 @@ public sealed class TrayApp : ApplicationContext
         var running = runners.Count(r => r.IsUp);
         var failed = runners.Count(r => r.State is ServiceState.Failed or ServiceState.Crashed);
         var text = $"RepoManager - {running} running" + (failed > 0 ? $", {failed} failed" : "");
-        var key = status + text;
+        var overlay = _blinking && _blinkOn ? Icons.Overlay.NeedsYou : !_blinking && _doneBadge ? Icons.Overlay.Done : Icons.Overlay.None;
+        var key = status + text + overlay;
         if (key == _lastStatus) return;
         _lastStatus = key;
         var old = _tray.Icon;
-        _tray.Icon = Icons.Tray(status);
+        _tray.Icon = Icons.Tray(status, overlay);
         _tray.Text = text.Length > 63 ? text[..63] : text;
         if (old != null) Icons.Destroy(old);
+    }
+
+    private Core.Config.TownSettings TownSettings() => _host.Config.Registry.Town ?? new Core.Config.TownSettings();
+
+    /// <summary>Carries out an attention decision: notification, sound, tray blink and done badge.</summary>
+    private void Apply(AttentionUpdate u)
+    {
+        if (u.Notice is { } n)
+        {
+            _noticeSession = n.SessionId;
+            _tray.ShowBalloonTip(8000, n.Title, string.IsNullOrWhiteSpace(n.Body) ? "Needs you in Claude" : n.Body, ToolTipIcon.Info);
+        }
+        if (u.Sound is { } s) Play(s);
+        _doneBadge = u.DoneBadge;
+        if (u.Blink != _blinking)
+        {
+            _blinking = u.Blink;
+            _blinkOn = u.Blink;
+            _blink.Enabled = u.Blink;
+        }
+        UpdateIcon();
+    }
+
+    private void Play(AttentionSound sound)
+    {
+        try
+        {
+            _player?.Dispose();
+            _player = new SoundPlayer(new MemoryStream(Beeps.Wav(sound)));
+            _player.Play();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or TimeoutException)
+        {
+            // No audio device: attention is only ever extra.
+        }
+    }
+
+    /// <summary>A town notification opens its session's own window; if that fails, the town opens on that worker.</summary>
+    private void OnNoticeClicked()
+    {
+        var target = AttentionTarget.For(_noticeSession, _host.Agents);
+        _noticeSession = null;
+        if (target == null)
+        {
+            ShowWindow();
+            return;
+        }
+        if (AgentWindows.Open(_host, target).Ok) return;
+        ShowWindow();
+        _window?.OpenSessionInTown(target);
     }
 
     private void ShowNotification(Notification n)
     {
         var project = _host.Config.FindProject(n.Project);
         if (project is { Notifications: false }) return;
+        _noticeSession = null;
         _tray.ShowBalloonTip(5000, n.Title, n.Message, n.IsError ? ToolTipIcon.Error : ToolTipIcon.Info);
     }
 
@@ -175,6 +246,8 @@ public sealed class TrayApp : ApplicationContext
         if (disposing)
         {
             _refresh.Dispose();
+            _blink.Dispose();
+            _player?.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
             _window?.Dispose();

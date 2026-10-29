@@ -111,6 +111,18 @@ public class PermissionBrokerTests
     }
 
     [Fact]
+    public async Task FocusChanged_RaisedOnChangesAndLeaseExpiry()
+    {
+        var broker = new PermissionBroker(TimeSpan.FromMilliseconds(100));
+        var seen = new List<bool>();
+        broker.FocusChanged += f => { lock (seen) seen.Add(f); };
+        broker.SetFocused(true);
+        broker.SetFocused(true); // a renewal is not a change
+        for (var i = 0; i < 100 && broker.Focused; i++) await Task.Delay(20);
+        lock (seen) Assert.Equal([true, false], seen);
+    }
+
+    [Fact]
     public async Task FocusLease_Renewed_KeepsWaiting()
     {
         var broker = new PermissionBroker(TimeSpan.FromMilliseconds(300));

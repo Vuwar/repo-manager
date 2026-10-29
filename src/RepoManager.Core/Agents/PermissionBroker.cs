@@ -36,6 +36,9 @@ public sealed class PermissionBroker : IDisposable
     /// <summary>Raised with the session id whenever that session's prompts change.</summary>
     public event Action<string>? PromptsChanged;
 
+    /// <summary>Raised when <see cref="Focused"/> changes, including when the lease runs out (not on renewals).</summary>
+    public event Action<bool>? FocusChanged;
+
     public bool Focused
     {
         get { lock (_gate) return _focused; }
@@ -45,8 +48,10 @@ public sealed class PermissionBroker : IDisposable
     public void SetFocused(bool focused)
     {
         List<Entry> released = [];
+        bool changed;
         lock (_gate)
         {
+            changed = _focused != focused;
             _focused = focused;
             if (focused)
             {
@@ -62,6 +67,7 @@ public sealed class PermissionBroker : IDisposable
         }
         foreach (var e in released) e.Waiter!.TrySetResult(NoDecision);
         foreach (var session in released.Select(e => e.SessionId).Distinct()) PromptsChanged?.Invoke(session);
+        if (changed) FocusChanged?.Invoke(focused);
     }
 
     public async Task<PermissionDecisionDto> WaitAsync(string sessionId, PermissionPromptDto prompt, TimeSpan max, CancellationToken ct)

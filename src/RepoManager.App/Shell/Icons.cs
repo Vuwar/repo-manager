@@ -38,6 +38,16 @@ public static class Icons
 
     public static Icon Tray(Status status) => Draw(32, ColorOf(status));
 
+    /// <summary>Agent Town marker in the top-left corner: a session needs the user (amber) or finished (green).</summary>
+    public enum Overlay { None, NeedsYou, Done }
+
+    public static Icon Tray(Status status, Overlay overlay) => Draw(32, ColorOf(status), overlay switch
+    {
+        Overlay.NeedsYou => Color.FromArgb(0xff, 0xc8, 0x57),
+        Overlay.Done => Color.FromArgb(0x7e, 0xe0, 0x81),
+        _ => null,
+    });
+
     public static void Destroy(Icon icon)
     {
         try { DestroyIcon(icon.Handle); } catch { }
@@ -45,7 +55,7 @@ public static class Icons
     }
 
     /// <summary>Rounded brand square with two stacked "server" bars; optional status dot.</summary>
-    public static Icon Draw(int size, Color? dot)
+    public static Icon Draw(int size, Color? dot, Color? corner = null)
     {
         using var bmp = new Bitmap(size, size);
         using (var g = Graphics.FromImage(bmp))
@@ -69,6 +79,15 @@ public static class Icons
                 var inset = size * 0.06f;
                 using var fill = new SolidBrush(c);
                 g.FillEllipse(fill, RectangleF.Inflate(dr, -inset, -inset));
+            }
+            if (corner is Color a)
+            {
+                var d = size * 0.44f;
+                var cr = new RectangleF(0, 0, d - 0.5f, d - 0.5f);
+                using var ring = new SolidBrush(Color.FromArgb(0x16, 0x18, 0x1d));
+                g.FillEllipse(ring, cr);
+                using var fill = new SolidBrush(a);
+                g.FillEllipse(fill, RectangleF.Inflate(cr, -size * 0.06f, -size * 0.06f));
             }
         }
         return Icon.FromHandle(bmp.GetHicon());

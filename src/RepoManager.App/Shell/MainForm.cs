@@ -262,6 +262,13 @@ public sealed class MainForm : Form
         PostWindowFocus(false);
     }
 
+    /// <summary>Asks the page to open a session's dialogue in the town (a notification click it could not route).</summary>
+    public void OpenSessionInTown(string sessionId)
+    {
+        if (_web?.CoreWebView2 is not { } core) return;
+        core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "openSession", id = sessionId }));
+    }
+
     private void PostWindowFocus(bool focused)
     {
         if (_web?.CoreWebView2 is not { } core) return;
