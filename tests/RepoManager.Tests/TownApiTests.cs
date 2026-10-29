@@ -162,6 +162,30 @@ public class TownApiTests(DaemonFixture f)
     }
 
     [Fact]
+    public async Task Answer_FromTown_GivesXp_ReleasedAnswerGivesNone()
+    {
+        var before = (await f.Http.GetFromJsonAsync<TownProgressDto>("api/town/progress", Protocol.Json))!.Player.Xp;
+        await f.Post("api/town/permission/answer", new PermissionAnswerRequest("not-waiting", "allow", false));
+        Assert.Equal(before, (await f.Http.GetFromJsonAsync<TownProgressDto>("api/town/progress", Protocol.Json))!.Player.Xp);
+
+        var id = NewId();
+        await Focus(true);
+        try
+        {
+            var t = PostPermission(id);
+            var p = await WaitForPrompt(id);
+            await f.Post("api/town/permission/answer", new PermissionAnswerRequest(p.RequestId, "allow", false));
+            await t.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(before + 20, (await f.Http.GetFromJsonAsync<TownProgressDto>("api/town/progress", Protocol.Json))!.Player.Xp);
+        }
+        finally
+        {
+            await Focus(false);
+            await PostHook(HookJson("SessionEnd", id));
+        }
+    }
+
+    [Fact]
     public async Task Permission_Answer_UnknownId_Fails() =>
         Assert.False((await f.Post("api/town/permission/answer", new PermissionAnswerRequest("nope", "allow", false))).Ok);
 

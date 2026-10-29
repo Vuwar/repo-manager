@@ -14,7 +14,7 @@ public sealed class PermissionBroker : IDisposable
     public static readonly TimeSpan DefaultFocusLease = TimeSpan.FromSeconds(15);
     private static readonly PermissionDecisionDto NoDecision = new(null, false);
 
-    private sealed record Entry(string SessionId, PermissionPromptDto Prompt, TaskCompletionSource<PermissionDecisionDto>? Waiter);
+    private sealed record Entry(string SessionId, PermissionPromptDto Prompt, TaskCompletionSource<PermissionDecisionDto>? Waiter, long Added = 0);
 
     private readonly object _gate = new();
     private readonly List<Entry> _entries = [];
@@ -76,7 +76,7 @@ public sealed class PermissionBroker : IDisposable
         lock (_gate)
         {
             if (_focused) waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            _entries.Add(new Entry(sessionId, prompt with { Answerable = waiter != null }, waiter));
+            _entries.Add(new Entry(sessionId, prompt with { Answerable = waiter != null }, waiter, _ticks()));
         }
         PromptsChanged?.Invoke(sessionId);
         if (waiter == null) return NoDecision;
@@ -90,6 +90,16 @@ public sealed class PermissionBroker : IDisposable
 
     /// <summary>False when no wait with this id is pending (already answered, released or unknown).</summary>
     public bool Answer(string requestId, PermissionDecisionDto decision) => Release(requestId, decision, keepListed: false);
+
+    /// <summary>How long ago the prompt appeared, or null when it is not listed.</summary>
+    public TimeSpan? AgeOf(string requestId)
+    {
+        lock (_gate)
+        {
+            var e = _entries.FirstOrDefault(x => x.Prompt.RequestId == requestId);
+            return e == null ? null : TimeSpan.FromMilliseconds(_ticks() - e.Added);
+        }
+    }
 
     /// <summary>The session a pending or listed prompt belongs to, or null.</summary>
     public string? SessionOf(string requestId)

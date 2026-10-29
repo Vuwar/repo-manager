@@ -14,22 +14,25 @@ public sealed class EventHub : IDisposable
     private readonly LogStore _logs;
     private readonly ConfigService _config;
     private readonly AgentRegistry _agents;
+    private readonly TownProgress _progress;
     private readonly List<Subscriber> _subs = [];
 
     public event Action<ServiceDto>? StatusChanged;
 
-    public EventHub(Supervisor supervisor, LogStore logs, ConfigService config, AgentRegistry agents)
+    public EventHub(Supervisor supervisor, LogStore logs, ConfigService config, AgentRegistry agents, TownProgress progress)
     {
         _supervisor = supervisor;
         _logs = logs;
         _config = config;
         _agents = agents;
+        _progress = progress;
         _supervisor.ServiceChanged += OnService;
         _supervisor.TaskChanged += OnTask;
         _logs.LineAdded += OnLog;
         _config.Changed += OnConfig;
         _agents.Changed += OnAgent;
         _agents.Ended += OnAgentEnd;
+        _progress.Awarded += OnProgress;
     }
 
     public sealed class Subscriber
@@ -75,6 +78,7 @@ public sealed class EventHub : IDisposable
     private void OnConfig() => Publish(new EventDto { Type = "projects" });
     private void OnAgent(AgentSessionDto dto) => Publish(new EventDto { Type = "agent", Payload = dto });
     private void OnAgentEnd(string id) => Publish(new EventDto { Type = "agentEnd", Payload = new { id } });
+    private void OnProgress(TownProgressDto progress, XpAwardDto award) => Publish(new EventDto { Type = "progress", Payload = new { progress, award } });
 
     public void Dispose()
     {
@@ -84,6 +88,7 @@ public sealed class EventHub : IDisposable
         _config.Changed -= OnConfig;
         _agents.Changed -= OnAgent;
         _agents.Ended -= OnAgentEnd;
+        _progress.Awarded -= OnProgress;
         lock (_subs)
         {
             foreach (var s in _subs) s.Channel.Writer.TryComplete();

@@ -75,6 +75,15 @@ public sealed record TownFocusRequest(bool Focused);
 
 public sealed record TownOpenRequest(string SessionId);
 
+/// <summary>XP and level: Level starts at LevelStart XP; the next level starts at NextLevel.</summary>
+public sealed record LevelDto(int Xp, int Level, int LevelStart, int NextLevel);
+
+/// <summary>The user's level and every repo's (by project name).</summary>
+public sealed record TownProgressDto(LevelDto Player, IReadOnlyDictionary<string, LevelDto> Repos);
+
+/// <summary>One award: Kind is "answer" (a prompt answered from the town), "send" (a town message got a session working) or "turn" (a repo's session finished a turn).</summary>
+public sealed record XpAwardDto(string Kind, int Amount, string? SessionId, string? Repo);
+
 /// <summary>Agent Town attention settings and whether claude-setup installs the town hooks. All on by default.</summary>
 public sealed record TownSettingsDto(bool Tray, bool Notifications, bool Sound, bool Hooks);
 

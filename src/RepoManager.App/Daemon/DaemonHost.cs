@@ -39,6 +39,8 @@ public sealed class DaemonHost : IAsyncDisposable
     /// <summary>Claude Code sessions on this machine, fed by <c>devm town-hook</c>.</summary>
     public AgentRegistry Agents { get; }
     public PermissionBroker Permissions { get; } = new();
+    /// <summary>Agent Town XP, saved in the data directory.</summary>
+    public TownProgress Progress { get; }
 
     /// <summary>Raised when a second launch or the CLI asks to show the window.</summary>
     public event Action? ActivateRequested;
@@ -59,7 +61,10 @@ public sealed class DaemonHost : IAsyncDisposable
         // The registry DTO carries the broker's prompts, so one "agent" event covers both.
         Permissions.PromptsChanged += id => Agents.SetPrompts(id, Permissions.PromptsFor(id));
         Agents.Ended += Permissions.ClearSession;
-        Events = new EventHub(Supervisor, Logs, Config, Agents);
+        Progress = new TownProgress(dataDir, () => DateTimeOffset.Now);
+        Agents.Changed += s => Progress.SessionChanged(s);
+        Agents.Ended += Progress.Forget;
+        Events = new EventHub(Supervisor, Logs, Config, Agents, Progress);
         _agentSweep = new System.Threading.Timer(_ => Agents.Sweep(AgentMaxAge), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 

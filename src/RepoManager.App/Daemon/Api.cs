@@ -293,8 +293,10 @@ public static class Api
         {
             if (req.Behavior is not ("allow" or "deny")) return ActionResultDto.Fail("behavior must be allow or deny");
             var session = d.Permissions.SessionOf(req.RequestId);
+            var age = d.Permissions.AgeOf(req.RequestId) ?? TimeSpan.MaxValue;
             if (session == null || !d.Permissions.Answer(req.RequestId, new PermissionDecisionDto(req.Behavior, req.Always)))
                 return ActionResultDto.Fail("that prompt is no longer waiting; answer it in the session window");
+            d.Progress.Answered(session, age);
             d.Agents.PromptAnswered(session);
             return ActionResultDto.Success("answered");
         });
@@ -305,6 +307,7 @@ public static class Api
             if (d.Agents.InboxFor(req.SessionId) is not { } inbox) return ActionResultDto.Fail("this session has no inbox; open its window");
             if (string.IsNullOrWhiteSpace(req.Text)) return ActionResultDto.Fail("message is empty");
             var (ok, message) = await AgentInbox.SendAsync(inbox.Socket, inbox.Token, AgentInbox.FromTownUser(req.Text), ctx.RequestAborted);
+            if (ok) d.Progress.Sent(req.SessionId);
             return ok ? ActionResultDto.Success(message) : ActionResultDto.Fail(message);
         });
 
@@ -316,6 +319,8 @@ public static class Api
                 : ActionResultDto.Fail("not a Claude desktop session"));
 
         api.MapGet("/town/settings", () => TownSettingsOf(d));
+
+        api.MapGet("/town/progress", () => d.Progress.Snapshot());
 
         api.MapPost("/town/settings", async (TownSettingsDto req) =>
         {
