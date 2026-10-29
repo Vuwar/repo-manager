@@ -19,6 +19,8 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
     private readonly Dictionary<string, AgentSessionDto> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Socket, string Token)> _inboxes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _ended = new(StringComparer.Ordinal);
+    // Stamped on every DTO under the lock: events are raised outside it and may arrive out of order.
+    private long _seq;
     private readonly Dictionary<string, (int Pid, DateTime? Started)> _pids = new(StringComparer.Ordinal);
 
     public event Action<AgentSessionDto>? Changed;
@@ -58,6 +60,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
                     CanSend = _inboxes.ContainsKey(e.SessionId),
                 };
                 if (updated.State != current.State) updated = updated with { Since = now };
+                updated = updated with { Seq = ++_seq };
                 _sessions[e.SessionId] = updated;
             }
         }
@@ -103,6 +106,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
             updated = current with { Prompts = prompts };
             if (prompts.Count > 0 && current.State != "waiting")
                 updated = updated with { State = "waiting", Message = "Needs permission: " + prompts[0].Summary, Since = clock() };
+            updated = updated with { Seq = ++_seq };
             _sessions[sessionId] = updated;
         }
         Changed?.Invoke(updated);
@@ -116,6 +120,7 @@ public sealed class AgentRegistry(Func<string, (string Project, string? Worktree
         {
             if (!_sessions.TryGetValue(sessionId, out var current) || current.State != "waiting" || current.Prompts.Count > 0) return;
             updated = current with { State = "working", Message = "Permission answered", Since = clock() };
+            updated = updated with { Seq = ++_seq };
             _sessions[sessionId] = updated;
         }
         Changed?.Invoke(updated);

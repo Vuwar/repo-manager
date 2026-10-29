@@ -17,8 +17,10 @@ public class TownProgressTests : IDisposable
 
     private TownProgress New() => new(_dir, () => _now);
 
-    private static AgentSessionDto S(string id, string state, string? project = "kodex") =>
-        new() { Id = id, Project = project, Folder = "f", Cwd = "C:\\r", State = state, Surface = "desktop" };
+    private static long _seq;
+
+    private static AgentSessionDto S(string id, string state, string? project = "kodex", long? seq = null) =>
+        new() { Id = id, Project = project, Folder = "f", Cwd = "C:\\r", State = state, Surface = "desktop", Seq = seq ?? ++_seq };
 
     [Theory]
     [InlineData(0, 1, 0, 50)]
@@ -127,6 +129,29 @@ public class TownProgressTests : IDisposable
         _now += TimeSpan.FromSeconds(30);
         // The next prompt is typed in the terminal, not sent from the town.
         Assert.Null(p.SessionChanged(S("s1", "working")));
+    }
+
+    [Fact]
+    public void StaleEvent_ArrivingLate_IsIgnored_NoSecondTurnAward()
+    {
+        var p = New();
+        p.SessionChanged(S("o1", "working", seq: 1));
+        Assert.NotNull(p.SessionChanged(S("o1", "done", seq: 3)));
+        Assert.Null(p.SessionChanged(S("o1", "working", seq: 2))); // overtaken on its way here
+        Assert.Null(p.SessionChanged(S("o1", "done", seq: 4)));
+        Assert.Equal(10, p.Snapshot().Repos["kodex"].Xp);
+    }
+
+    [Fact]
+    public void Revision_GrowsWithEveryAward()
+    {
+        var p = New();
+        var r0 = p.Snapshot().Revision;
+        p.Answered("s1", TimeSpan.Zero);
+        var r1 = p.Snapshot().Revision;
+        p.Answered("s1", TimeSpan.Zero);
+        Assert.True(r1 > r0);
+        Assert.True(p.Snapshot().Revision > r1);
     }
 
     [Fact]

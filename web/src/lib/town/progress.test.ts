@@ -37,3 +37,16 @@ describe('progress in the store', () => {
     expect(s.progress).toEqual(progress);
   });
 });
+
+describe('progress revisions', () => {
+  it('an older snapshot arriving late does not step the totals back, but its award still counts', () => {
+    const newer = { revision: 5, player: level(40, 1), repos: {} };
+    const older = { revision: 4, player: level(20, 1), repos: {} };
+    let s = reducer(initialState(), { type: 'progress', progress: newer, award: { kind: 'answer', amount: 20 }, at: 1 });
+    s = reducer(s, { type: 'progress', progress: older, award: { kind: 'answer', amount: 20 }, at: 2 });
+    expect(s.progress?.player.xp).toBe(40);
+    expect(s.awards).toHaveLength(2);
+    s = reducer(s, { type: 'progressLoaded', progress: older });
+    expect(s.progress?.player.xp).toBe(40);
+  });
+});

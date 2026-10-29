@@ -28,6 +28,8 @@ public sealed class TownProgress
     private readonly FileShape _data;
     private readonly Dictionary<string, string> _lastState = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _sent = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _lastSeq = new(StringComparer.Ordinal);
+    private long _revision;
 
     /// <summary>Raised after every award, outside the lock, with the new totals.</summary>
     public event Action<TownProgressDto, XpAwardDto>? Awarded;
@@ -68,6 +70,9 @@ public sealed class TownProgress
         XpAwardDto? award = null;
         lock (_gate)
         {
+            // An update overtaken by a newer one for the same session is old news.
+            if (s.Seq != 0 && _lastSeq.TryGetValue(s.Id, out var lastSeq) && s.Seq <= lastSeq) return null;
+            if (s.Seq != 0) _lastSeq[s.Id] = s.Seq;
             var had = _lastState.TryGetValue(s.Id, out var before);
             _lastState[s.Id] = s.State;
             if (had && before == s.State) return null;
@@ -85,6 +90,7 @@ public sealed class TownProgress
         {
             _lastState.Remove(sessionId);
             _sent.Remove(sessionId);
+            _lastSeq.Remove(sessionId);
         }
     }
 
@@ -94,7 +100,7 @@ public sealed class TownProgress
     }
 
     private TownProgressDto SnapshotLocked() =>
-        new(LevelOf(_data.Player), _data.Repos.ToDictionary(p => p.Key, p => LevelOf(p.Value), StringComparer.OrdinalIgnoreCase));
+        new(LevelOf(_data.Player), _data.Repos.ToDictionary(p => p.Key, p => LevelOf(p.Value), StringComparer.OrdinalIgnoreCase), _revision);
 
     private XpAwardDto Award(XpAwardDto award, string? repo)
     {
@@ -103,6 +109,7 @@ public sealed class TownProgress
         {
             if (repo != null) _data.Repos[repo] = Math.Min(MaxXp, _data.Repos.GetValueOrDefault(repo) + award.Amount);
             else _data.Player = Math.Min(MaxXp, _data.Player + award.Amount);
+            _revision++;
             Save();
             snapshot = SnapshotLocked();
         }

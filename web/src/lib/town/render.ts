@@ -609,11 +609,17 @@ export function workerColors(id: string): { hat: string; shirt: string } {
  * The worker drawn at lot `index`, slot `k`, whose hit box (the body and the bubble above it) contains the world
  * point; the front-most one (lowest on screen) wins.
  */
-export function workerAt(lots: Lot[], worldX: number, worldY: number): { lot: number; index: number; session: AgentSessionDto } | null {
+export function workerAt(
+  lots: Lot[],
+  worldX: number,
+  worldY: number,
+  /** Where the scene draws a worker now (it may still be walking in); its spot when unknown. */
+  drawnAt?: (id: string) => [number, number] | null,
+): { lot: number; index: number; session: AgentSessionDto } | null {
   let best: { lot: number; index: number; session: AgentSessionDto; y: number } | null = null;
   lots.forEach((lot, i) =>
     lot.workers.slice(0, MAX_WORKERS).forEach((session, k) => {
-      const [x, y] = workerSpot(i, k, session.state);
+      const [x, y] = drawnAt?.(session.id) ?? workerSpot(i, k, session.state);
       if (worldX < x - 5 || worldX > x + 5 || worldY < y - 31 || worldY > y + 2) return;
       if (!best || y > best.y) best = { lot: i, index: k, session, y };
     }),

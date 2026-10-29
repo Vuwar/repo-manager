@@ -49,6 +49,13 @@ describe('nearestWorker', () => {
     const [x] = workerSpot(1, 0, 'working');
     expect(nearestWorker(lots, x + 10)?.session.id).toBe('1-0');
   });
+  it('measures to where a walking worker is drawn', () => {
+    const [x] = workerSpot(1, 0, 'working');
+    const drawnAt = (id: string): [number, number] | null => (id === '1-0' ? [x - 30, 160] : null);
+    expect(nearestWorker(lots, x - 30, undefined, drawnAt)?.session.id).toBe('1-0');
+    expect(nearestWorker(lots, x + 10, undefined, drawnAt)).toBeNull();
+  });
+
   it('finds nobody further away', () => {
     const [x] = workerSpot(1, 0, 'working');
     expect(nearestWorker(lots, x + 30)).toBeNull();

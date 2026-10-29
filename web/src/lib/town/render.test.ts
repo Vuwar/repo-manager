@@ -125,6 +125,13 @@ describe('workerAt', () => {
     expect(workerAt(lots, x, y - 30)?.session.id).toBe('c');
   });
 
+  it('uses where a worker is drawn when the scene knows it (walking in)', () => {
+    const [x, y] = workerSpot(1, 0, 'waiting');
+    const drawnAt = (id: string): [number, number] | null => (id === 'c' ? [x - 30, y] : null);
+    expect(workerAt(lots, x - 30, y, drawnAt)?.session.id).toBe('c');
+    expect(workerAt(lots, x, y, drawnAt)).toBeNull();
+  });
+
   it('finds nothing between workers', () => {
     expect(workerAt(lots, 2, 10)).toBeNull();
     expect(workerAt(lots, 48, 165)).toBeNull();

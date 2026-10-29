@@ -87,6 +87,10 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     return shown.map((k) => byKey.get(k)).filter((l): l is Lot => !!l);
   }, [street, shown]);
 
+  // The canvas scene, for where it draws workers now (clicks and Enter aim at a worker still walking in).
+  const sceneRef = useRef<TownScene | null>(null);
+  const drawnAt = (id: string) => sceneRef.current?.workerPosition(id) ?? null;
+
   // Size: a whole number of device pixels per scene pixel (crisp at 125% and 150% display scaling), as large as
   // fits the height. `zoom` is the same in CSS pixels, for everything laid out over the canvas.
   const stageRef = useRef<HTMLDivElement>(null);
@@ -242,7 +246,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   // Keys: arrows walk the boss, Enter talks to the worker beside it, Home re-sorts and goes to the left end,
   // F11 toggles full screen, Tab and Q talk. The dialogue box handles its own keys (Esc, menu arrows) while open.
   const talkNearBoss = () => {
-    const near = nearestWorker(lots, boss.current.x);
+    const near = nearestWorker(lots, boss.current.x, undefined, drawnAt);
     if (!near) return false;
     talkTo(near.session.id);
     return true;
@@ -306,7 +310,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     drag.current = null;
     if (!d || d.moved || e.type !== 'pointerup') return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const hit = workerAt(lots, (e.clientX - rect.left) / zoom + camX, (e.clientY - rect.top) / zoom);
+    const hit = workerAt(lots, (e.clientX - rect.left) / zoom + camX, (e.clientY - rect.top) / zoom, drawnAt);
     if (hit) {
       // The box opens at once; the boss runs over in the background.
       talkTo(hit.session.id);
@@ -349,6 +353,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     ctx.imageSmoothingEnabled = false;
     const reduced = prefersReducedMotion();
     const scene = new TownScene(reduced);
+    sceneRef.current = scene;
     let last = performance.now();
     let phase = 0.42;
     let raf = 0;

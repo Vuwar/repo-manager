@@ -270,6 +270,16 @@ public class AgentRegistryTests
     }
 
     [Fact]
+    public void Seq_GrowsWithEveryChange()
+    {
+        var a = _reg.Apply(Ev("SessionStart"))!.Seq;
+        var b = _reg.Apply(Ev("PostToolUse", tool: "Bash"))!.Seq;
+        _reg.SetPrompts("s1", [new PermissionPromptDto { RequestId = "r", ToolName = "Bash", Summary = "x", Answerable = true }]);
+        var c = _reg.Snapshot().Single().Seq;
+        Assert.True(a < b && b < c);
+    }
+
+    [Fact]
     public void Token_NeverInDto()
     {
         _reg.Apply(Ev("SessionStart", socket: @"\\.\pipe\x", token: "secret-token-123"));

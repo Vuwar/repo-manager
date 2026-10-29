@@ -150,6 +150,11 @@ function cap(lines: LogLineDto[]): LogLineDto[] {
   return lines.length > MAX_LOG_LINES ? lines.slice(lines.length - MAX_LOG_LINES) : lines;
 }
 
+/** Keeps the newer snapshot: awards are published outside the daemon's lock and can arrive out of order. */
+function newerProgress(current: TownProgressDto | null, next: TownProgressDto): TownProgressDto {
+  return current && (current.revision ?? 0) > (next.revision ?? 0) ? current : next;
+}
+
 const AGENT_LOG_MAX = 5;
 
 /** Appends a status message unless it repeats the last one; keeps the newest AGENT_LOG_MAX. */
@@ -272,9 +277,13 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, agents, agentLog };
     }
     case 'progressLoaded':
-      return { ...state, progress: action.progress };
+      return { ...state, progress: newerProgress(state.progress, action.progress) };
     case 'progress':
-      return { ...state, progress: action.progress, awards: [...state.awards, { ...action.award, at: action.at }].slice(-10) };
+      return {
+        ...state,
+        progress: newerProgress(state.progress, action.progress),
+        awards: [...state.awards, { ...action.award, at: action.at }].slice(-10),
+      };
     case 'authFailed':
       return { ...state, authFailed: true };
     default:

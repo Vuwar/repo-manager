@@ -43,6 +43,8 @@ public sealed record AgentSessionDto
     public string? LastTurn { get; init; }
     /// <summary>A question the session left for the user with suggested replies (the desktop app's turn wrap-up card).</summary>
     public WrapUpDto? WrapUp { get; init; }
+    /// <summary>Grows with every change, so a listener can drop an update that arrives after a newer one.</summary>
+    public long Seq { get; init; }
 }
 
 /// <summary>Claude's end-of-turn summary and question, with replies the user can pick (each sends its Message).</summary>
@@ -79,7 +81,8 @@ public sealed record TownOpenRequest(string SessionId);
 public sealed record LevelDto(int Xp, int Level, int LevelStart, int NextLevel);
 
 /// <summary>The user's level and every repo's (by project name).</summary>
-public sealed record TownProgressDto(LevelDto Player, IReadOnlyDictionary<string, LevelDto> Repos);
+/// <summary>Revision grows with every award, so a client can drop a snapshot that arrives after a newer one.</summary>
+public sealed record TownProgressDto(LevelDto Player, IReadOnlyDictionary<string, LevelDto> Repos, long Revision = 0);
 
 /// <summary>One award: Kind is "answer" (a prompt answered from the town), "send" (a town message got a session working) or "turn" (a repo's session finished a turn).</summary>
 public sealed record XpAwardDto(string Kind, int Amount, string? SessionId, string? Repo);

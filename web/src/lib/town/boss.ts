@@ -38,11 +38,17 @@ export function followCamera(camX: number, bossX: number, view: number, world: n
 }
 
 /** The drawn worker closest to the boss along the street, within maxDist. */
-export function nearestWorker(lots: Lot[], bossX: number, maxDist = TALK_DISTANCE): { session: AgentSessionDto; lot: number; index: number } | null {
+export function nearestWorker(
+  lots: Lot[],
+  bossX: number,
+  maxDist = TALK_DISTANCE,
+  /** Where the scene draws a worker now (it may still be walking in); its spot when unknown. */
+  drawnAt?: (id: string) => [number, number] | null,
+): { session: AgentSessionDto; lot: number; index: number } | null {
   let best: { session: AgentSessionDto; lot: number; index: number; d: number } | null = null;
   lots.forEach((lot, i) =>
     lot.workers.slice(0, MAX_WORKERS).forEach((session, k) => {
-      const d = Math.abs(workerSpot(i, k, session.state)[0] - bossX);
+      const d = Math.abs((drawnAt?.(session.id) ?? workerSpot(i, k, session.state))[0] - bossX);
       if (d <= maxDist && (!best || d < best.d)) best = { session, lot: i, index: k, d };
     }),
   );

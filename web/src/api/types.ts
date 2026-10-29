@@ -205,6 +205,8 @@ export interface AgentSessionDto {
   lastTurn?: string;
   /** A question the session left with suggested replies (the desktop app's wrap-up card). */
   wrapUp?: WrapUpDto;
+  /** Grows with every change of this session. */
+  seq?: number;
 }
 
 /** XP and level: the level starts at levelStart XP, the next one at nextLevel. */
@@ -219,6 +221,8 @@ export interface LevelDto {
 export interface TownProgressDto {
   player: LevelDto;
   repos: Record<string, LevelDto>;
+  /** Grows with every award; an older snapshot arriving late is dropped. */
+  revision?: number;
 }
 
 /** One XP award: a prompt answered from the town, a town message that got a session working, or a finished turn. */
