@@ -118,7 +118,12 @@ public class PermissionBrokerTests
         broker.FocusChanged += f => { lock (seen) seen.Add(f); };
         broker.SetFocused(true);
         broker.SetFocused(true); // a renewal is not a change
-        for (var i = 0; i < 100 && broker.Focused; i++) await Task.Delay(20);
+        // Wait for the event, not for Focused: the event is raised just after the flag changes.
+        for (var i = 0; i < 100; i++)
+        {
+            lock (seen) if (seen.Count >= 2) break;
+            await Task.Delay(20);
+        }
         lock (seen) Assert.Equal([true, false], seen);
     }
 
