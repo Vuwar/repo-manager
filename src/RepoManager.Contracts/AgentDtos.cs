@@ -127,3 +127,23 @@ public sealed record TranscriptPageDto
     public int Start { get; init; }
     public int Total { get; init; }
 }
+
+/// <summary>A session started from the town. State: none (no first prompt), pending, sent, expired or failed.</summary>
+public sealed record StartStatusDto
+{
+    public required string Id { get; init; }
+    public required string State { get; init; }
+    public string? Message { get; init; }
+}
+
+/// <summary>Start a session in a project (or continue a past one in a new session). Surface: terminal or desktop.</summary>
+public sealed record TownStartRequest
+{
+    public required string Surface { get; init; }
+    public required string Project { get; init; }
+    public string? Worktree { get; init; }
+    /// <summary>The past session this one continues; its folder is used when it still belongs to the project.</summary>
+    public string? FromSessionId { get; init; }
+    /// <summary>The first prompt (terminal only), sent through the new session's inbox.</summary>
+    public string? Text { get; init; }
+}
