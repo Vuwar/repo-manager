@@ -1,7 +1,7 @@
 # Agent Town design
 
 Date: 2026-10-27 (updated 2026-10-28 with what was decided while building plans 1 to 3; updated 2026-10-29 with past sessions and new sessions)
-Status: plans 1 to 5 built; plan 6 (past sessions and new sessions) to do
+Status: plans 1 to 6 built
 
 ## Intent
 
