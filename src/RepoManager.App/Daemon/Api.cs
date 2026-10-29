@@ -355,7 +355,9 @@ public static class Api
         api.MapPost("/town/start", (TownStartRequest req) =>
         {
             var failed = (string m) => new StartStatusDto { Id = "", State = "failed", Message = m };
-            if (d.Config.FindInstance(Ids.Instance(req.Project, req.Worktree)) is not { } instance) return failed("unknown project");
+            // A worktree removed since the past session ran starts in the main project.
+            if ((d.Config.FindInstance(Ids.Instance(req.Project, req.Worktree)) ?? d.Config.FindInstance(Ids.Instance(req.Project, null))) is not { } instance)
+                return failed("unknown project");
             // A past session's folder when it still exists and still belongs to this project, else the project root.
             var folder = instance.Root;
             if (req.FromSessionId != null && d.History.Find(req.FromSessionId) is { } past && Directory.Exists(past.Cwd)

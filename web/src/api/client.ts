@@ -1,4 +1,4 @@
-import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, EffectiveConfigDto, FolderDto, GroupActionRequest, InstanceActionRequest, LogLineDto, OpenTool, PortDto, ProjectDto, ProjectSettingsRequest, ScanResultDto, ServiceActionRequest, TownProgressDto, TownSettingsDto } from './types';
+import type { ActionResultDto, AgentSessionDto, DaemonInfoDto, EffectiveConfigDto, FolderDto, GroupActionRequest, InstanceActionRequest, LogLineDto, OpenTool, PortDto, ProjectDto, ProjectSettingsRequest, PastSessionDto, ScanResultDto, ServiceActionRequest, StartStatusDto, TownProgressDto, TownSettingsDto, TownStartRequest, TranscriptPageDto } from './types';
 
 export const TOKEN_HEADER = 'X-RepoManager-Token';
 
@@ -95,6 +95,12 @@ export const api = {
   townSettings: () => request<TownSettingsDto>('GET', '/api/town/settings'),
   townProgress: () => request<TownProgressDto>('GET', '/api/town/progress'),
   saveTownSettings: (settings: TownSettingsDto) => action('/api/town/settings', settings),
+  townHistory: (project: string) => request<PastSessionDto[]>('GET', '/api/town/history?project=' + encodeURIComponent(project)),
+  townTranscript: (id: string, before?: number) =>
+    request<TranscriptPageDto>('GET', `/api/town/history/${encodeURIComponent(id)}` + (before === undefined ? '' : `?before=${before}`)),
+  townHandoff: (id: string) => request<{ text: string }>('GET', `/api/town/history/${encodeURIComponent(id)}/handoff`),
+  townStart: (req: TownStartRequest) => request<StartStatusDto>('POST', '/api/town/start', req),
+  townStartStatus: (id: string) => request<StartStatusDto>('GET', `/api/town/start/${encodeURIComponent(id)}`),
   projects: (git = true, signal?: AbortSignal) =>
     request<ProjectDto[]>('GET', '/api/projects' + qs({ git: git ? undefined : false }), undefined, signal),
 

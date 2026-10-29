@@ -3777,6 +3777,109 @@ details.advanced[open] {
   color: #ff8a7a;
 }
 
+/* Repo panel: a building's past sessions and new sessions, in the settings panel's pixel frame. */
+.town-repo {
+  width: min(460px, calc(100vw - 24px));
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.town-repo header span:last-child {
+  display: flex;
+  gap: 10px;
+}
+.town-repo section {
+  padding: 8px 10px;
+}
+.town-repo-list,
+.town-repo-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.town-repo-new {
+  border-bottom: 2px solid #2d3668;
+}
+.town-repo button:not(header button) {
+  font: inherit;
+  color: #151a38;
+  background: #ffc857;
+  border: 2px solid #f2ead4;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.town-repo button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.town-repo-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
+.town-repo textarea {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: #f2ead4;
+  background: #0d1130;
+  border: 2px solid #2d3668;
+  padding: 4px 6px;
+  resize: vertical;
+}
+.town-repo .town-repo-row {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  text-align: left;
+  color: inherit;
+  background: #1c2350;
+  border: 2px solid #2d3668;
+}
+.town-repo .town-repo-row:hover,
+.town-repo .town-repo-row:focus-visible {
+  border-color: #ffc857;
+}
+.town-repo-title {
+  display: block;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.town-repo-tag {
+  color: #ffc857;
+}
+.town-entry {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.town-entry p {
+  margin: 0 0 4px;
+}
+.town-entry-user {
+  padding: 4px 6px;
+  background: #1c2350;
+  white-space: pre-wrap;
+}
+.town-entry-who {
+  display: block;
+  color: #ffc857;
+  font-weight: bold;
+}
+.town-entry-tool {
+  color: #98a1cf;
+  font-size: 11px;
+}
+.town-repo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  align-items: flex-start;
+}
+
 .town-level {
   color: #ffc857;
   font-weight: bold;

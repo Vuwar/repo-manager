@@ -483,7 +483,7 @@ public class TownApiTests(DaemonFixture f)
     {
         var st = await Start(new TownStartRequest { Surface = "terminal", Project = "nope" });
         Assert.Equal("failed", st.State);
-        Assert.Empty(f.Launched.Where(p => p.WorkingDirectory == "nope"));
+        Assert.DoesNotContain(f.Launched, p => p.WorkingDirectory == "nope");
     }
 
     [Fact]
@@ -539,5 +539,14 @@ public class TownApiTests(DaemonFixture f)
         }
         Assert.Equal("failed", now!.State);
         await PostHook(HookJson("SessionEnd", id));
+    }
+
+    [Fact]
+    public async Task Start_WithRemovedWorktree_UsesProjectRoot()
+    {
+        f.Launched.Clear();
+        var st = await Start(new TownStartRequest { Surface = "terminal", Project = "demo", Worktree = "gone-wt" });
+        Assert.Equal("none", st.State);
+        Assert.Equal(["-d", f.Project, "claude"], Assert.Single(f.Launched).ArgumentList);
     }
 }

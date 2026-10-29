@@ -12,9 +12,11 @@ const api = {
   townOpenHost: vi.fn(() => Promise.resolve(ok)),
   townSettings: vi.fn(() => Promise.resolve({ tray: true, notifications: true, sound: true, hooks: true })),
   saveTownSettings: vi.fn(() => Promise.resolve(ok)),
+  townHistory: vi.fn(() => Promise.resolve([])),
 };
 vi.mock('../api/client', () => ({ api }));
 const { workerSpot } = await import('../lib/town/render');
+const { lotX } = await import('../lib/town/camera');
 
 const { TownView } = await import('./TownView');
 const { dispatch } = await import('../state/store');
@@ -529,6 +531,57 @@ describe('TownView', () => {
       cleanup();
       await act(async () => void (await new Promise((r) => setTimeout(r, 0))));
       expect(api.townFocus).toHaveBeenLastCalledWith(false);
+    });
+  });
+
+  describe('repo panel', () => {
+    const clickBuilding = (i: number) => {
+      const stage = document.querySelector('.town-stage')!;
+      fireEvent.pointerDown(stage, { button: 0, pointerId: 1, clientX: (lotX(i) + 20) * 3, clientY: 125 * 3 });
+      fireEvent.pointerUp(stage, { button: 0, pointerId: 1, clientX: (lotX(i) + 20) * 3, clientY: 125 * 3 });
+    };
+    const panel = () => screen.queryByRole('complementary', { name: /sessions$/ });
+
+    it('clicking a building opens its panel and closes the dialogue', async () => {
+      setup(undefined, [agent('s1', { project: 'alpha', state: 'idle' })]);
+      const [x, y] = workerSpot(0, 0, 'idle');
+      const stage = document.querySelector('.town-stage')!;
+      fireEvent.pointerDown(stage, { button: 0, pointerId: 1, clientX: x * 3, clientY: (y - 6) * 3 });
+      fireEvent.pointerUp(stage, { button: 0, pointerId: 1, clientX: x * 3, clientY: (y - 6) * 3 });
+      expect(screen.queryByRole('dialog')).toBeTruthy();
+      expect(panel()).toBeNull();
+
+      clickBuilding(1);
+      await act(async () => {});
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(panel()?.getAttribute('aria-label')).toBe('beta sessions');
+      expect(api.townHistory).toHaveBeenCalledWith('beta');
+    });
+
+    it('a temporary lot opens no panel', () => {
+      setup([], [agent('1', { folder: 'tool', cwd: 'C:\\x\\tool', state: 'working' })]);
+      clickBuilding(0);
+      expect(panel()).toBeNull();
+    });
+
+    it('Esc closes the panel', async () => {
+      setup();
+      clickBuilding(0);
+      await act(async () => {});
+      expect(panel()).toBeTruthy();
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(panel()).toBeNull();
+    });
+
+    it('arrows do not move the boss while typing in the panel', async () => {
+      vi.useFakeTimers();
+      setup();
+      clickBuilding(0);
+      await act(async () => {});
+      const before = bossX();
+      fireEvent.keyDown(screen.getByRole('textbox', { name: 'First prompt' }), { key: 'ArrowRight' });
+      act(() => vi.advanceTimersByTime(1000));
+      expect(bossX()).toBe(before);
     });
   });
 });

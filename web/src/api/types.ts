@@ -304,3 +304,48 @@ export interface ProjectSettingsRequest {
   notifications?: boolean;
   overridesJson?: string;
 }
+
+/** A finished or closed Claude Code session, read from its transcript. */
+export interface PastSessionDto {
+  id: string;
+  project?: string | null;
+  worktree?: string | null;
+  title: string;
+  surface: 'desktop' | 'terminal';
+  /** The desktop app's id (local_...): it can be resumed there. */
+  hostSessionId?: string | null;
+  archived: boolean;
+  started: string;
+  lastActivity: string;
+  cwd: string;
+}
+
+export interface TranscriptEntryDto {
+  role: 'user' | 'assistant' | 'tool';
+  text: string;
+  at?: string | null;
+}
+
+/** Entries [start, start + entries.length) of a past session's total. */
+export interface TranscriptPageDto {
+  id: string;
+  entries: TranscriptEntryDto[];
+  start: number;
+  total: number;
+}
+
+export type StartState = 'none' | 'pending' | 'sent' | 'expired' | 'failed';
+
+export interface StartStatusDto {
+  id: string;
+  state: StartState;
+  message?: string | null;
+}
+
+export interface TownStartRequest {
+  surface: 'terminal' | 'desktop';
+  project: string;
+  worktree?: string | null;
+  fromSessionId?: string | null;
+  text?: string | null;
+}

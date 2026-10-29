@@ -629,6 +629,19 @@ export function workerAt(
   return { lot, index, session };
 }
 
+/** Scene px above a building's wall that still count as the building (its roof). */
+const ROOF_HIT = 10;
+
+/** Index of the building drawn under a world point (wall or roof), or null. */
+export function lotAt(lots: Lot[], worldX: number, worldY: number, levelOf: (lot: Lot) => number): number | null {
+  const i = lots.findIndex((lot, k) => {
+    const w = lot.group === 'none' ? SMALL_BW : BW;
+    const px = lotX(k) + (BW - w) / 2, top = GROUND - buildingHeight(lot, levelOf(lot)) - ROOF_HIT;
+    return worldX >= px && worldX <= px + w && worldY >= top && worldY <= GROUND;
+  });
+  return i < 0 ? null : i;
+}
+
 /** Head and shoulders of a worker in a 16 x 16 logical box, for the dialogue portrait. */
 export function drawPortrait(ctx: Draw2D, session: AgentSessionDto): void {
   const { hat, shirt } = workerColors(session.id);

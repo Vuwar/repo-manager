@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { agent } from '../../test/fixtures';
 import { lotX, SLOT_W } from './camera';
-import { drawPortrait, FLAG_COLOR, FLOWER_COLOR, paletteFor, TownScene, workerAt, workerColors, workerSpot, type Draw2D, type TownFrame } from './render';
+import { drawPortrait, FLAG_COLOR, FLOWER_COLOR, lotAt, paletteFor, TownScene, workerAt, workerColors, workerSpot, type Draw2D, type TownFrame } from './render';
 import type { Lot } from './street';
 
 /** Records draw calls; fillRect x is recorded in screen space (after the current translate). */
@@ -237,5 +237,23 @@ describe('walking workers', () => {
     expect(at(scene, 'd')).toEqual(workerSpot(0, 0, 'working'));
     scene.update([lot(0)], 0.016, 32);
     expect(at(scene, 'd')).toBeNull();
+  });
+});
+
+describe('lotAt', () => {
+  const lots = [lot(0, { group: 'idle', workers: [agent('s1', { state: 'idle' })] }), lot(1)];
+  const level = () => 1;
+
+  it('hits the body of the building under the point', () => {
+    expect(lotAt(lots, lotX(0) + 20, 130, level)).toBe(0);
+    expect(lotAt(lots, lotX(1) + 14, 130, level)).toBe(1);
+  });
+
+  it('misses the gap between buildings, the sky and the road', () => {
+    expect(lotAt(lots, lotX(0) + 45, 130, level)).toBeNull();
+    expect(lotAt(lots, lotX(0) + 20, 40, level)).toBeNull();
+    expect(lotAt(lots, lotX(0) + 20, 150, level)).toBeNull();
+    // A lot with no session is drawn narrower, centred in its slot.
+    expect(lotAt(lots, lotX(1) + 2, 130, level)).toBeNull();
   });
 });

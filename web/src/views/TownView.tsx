@@ -9,6 +9,7 @@ import { questsFor } from '../lib/town/quests';
 import { useNow } from '../lib/useNow';
 import { DialogueBox } from './town/DialogueBox';
 import { QuestLog } from './town/QuestLog';
+import { RepoPanel } from './town/RepoPanel';
 import { TownSettings } from './town/TownSettings';
 import type { TownSettingsDto } from '../api/types';
 import {
@@ -26,7 +27,7 @@ import {
   worldWidth,
 } from '../lib/town/camera';
 import { heldOrder, RESORT_DELAY_MS } from '../lib/town/hold';
-import { MAX_WORKERS, NO_SESSION_COLOR, STATE_COLOR, TownScene, workerAt, workerSpot } from '../lib/town/render';
+import { lotAt, MAX_WORKERS, NO_SESSION_COLOR, STATE_COLOR, TownScene, workerAt, workerSpot } from '../lib/town/render';
 import { buildStreet, type Lot, type LotGroup } from '../lib/town/street';
 import { useAppState } from '../state/store';
 
@@ -164,6 +165,8 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   const [open, setOpen] = useState<string | null>(null);
   const [seen, setSeen] = useState<Record<string, string>>({});
   const [questsOpen, setQuestsOpen] = useState(false);
+  /** The project whose past and new sessions panel is open (a building was clicked). */
+  const [repoPanel, setRepoPanel] = useState<string | null>(null);
   const now = useNow();
   // In order: a late "true" overtaking a "false" would hold prompts for up to the 15 s lease.
   useEffect(() => startFocusReporting(inOrder((f) => api.townFocus(f))), []);
@@ -226,6 +229,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   }, [openSession, seen]);
   const talkTo = (id: string) => {
     setQuestsOpen(false);
+    setRepoPanel(null);
     setOpen(id);
   };
   /** A reply linked another desktop session: talk to it here when it is in town, else open it in Claude. */
@@ -251,8 +255,8 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     talkTo(near.session.id);
     return true;
   };
-  const keys = useRef({ home, nextWaiting, talkNearBoss, runBoss, boxOpen: false, questsOpen });
-  keys.current = { home, nextWaiting, talkNearBoss, runBoss, boxOpen: !!openSession, questsOpen };
+  const keys = useRef({ home, nextWaiting, talkNearBoss, runBoss, boxOpen: false, questsOpen, panelOpen: false });
+  keys.current = { home, nextWaiting, talkNearBoss, runBoss, boxOpen: !!openSession, questsOpen, panelOpen: repoPanel !== null };
   useEffect(() => {
     const onUp = (e: KeyboardEvent) => {
       if ((e.key === 'ArrowLeft' && held.current === -1) || (e.key === 'ArrowRight' && held.current === 1)) held.current = 0;
@@ -275,6 +279,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       }
       else if (e.key === 'q' || e.key === 'Q') setQuestsOpen((q) => !q);
       else if (e.key === 'Escape' && k.questsOpen) setQuestsOpen(false);
+      else if (e.key === 'Escape' && k.panelOpen) setRepoPanel(null);
       // Nothing open: Esc leaves borderless full screen (the shell ignores it otherwise).
       else if (e.key === 'Escape' && !k.boxOpen) postFullscreen(false);
       else return;
@@ -320,6 +325,14 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
         boss.current = { ...boss.current, target };
         runBoss();
       }
+      return;
+    }
+    // A building (not a worker in front of it) opens its repo's past and new sessions.
+    const lot = lotAt(lots, (e.clientX - rect.left) / zoom + camX, (e.clientY - rect.top) / zoom, (l) => levels[l.key] ?? 1);
+    if (lot !== null && !lots[lot].temporary) {
+      setOpen(null);
+      setQuestsOpen(false);
+      setRepoPanel(lots[lot].name);
     }
   };
   const onPointerEnter = () => {
@@ -480,6 +493,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
           onDraft={(text) => setDrafts((d) => ({ ...d, [openSession.id]: text }))}
         />
       )}
+      {repoPanel && <RepoPanel key={repoPanel} project={repoPanel} onClose={() => setRepoPanel(null)} />}
       {settingsOpen && <TownSettings settings={settings} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
       {questsOpen && <QuestLog quests={questsFor(lots, seen)} now={now} onOpen={talkTo} onClose={() => setQuestsOpen(false)} />}
     </div>
