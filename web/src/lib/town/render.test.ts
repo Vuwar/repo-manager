@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { agent } from '../../test/fixtures';
 import { lotX, SLOT_W } from './camera';
-import { drawPortrait, paletteFor, TownScene, workerAt, workerColors, workerSpot, type Draw2D, type TownFrame } from './render';
+import { drawPortrait, FLAG_COLOR, FLOWER_COLOR, paletteFor, TownScene, workerAt, workerColors, workerSpot, type Draw2D, type TownFrame } from './render';
 import type { Lot } from './street';
 
 /** Records draw calls; fillRect x is recorded in screen space (after the current translate). */
@@ -146,5 +146,89 @@ describe('drawPortrait', () => {
     const { hat, shirt } = workerColors('portrait-1');
     expect(seen).toContain(hat);
     expect(seen).toContain(shirt);
+  });
+});
+
+describe('buildings by level', () => {
+  /** Lowest y the building's wall reaches (its top), from fillRects inside lot 0's x range. */
+  const top = (levels: Record<string, number>, group: Lot['group'] = 'working') => {
+    const { ctx, calls } = fakeCtx();
+    const l = lot(0, { group, workers: group === 'none' ? [] : [agent('w', { state: 'working' })] });
+    new TownScene(true).draw(ctx, frame([l], 0, { levels }));
+    return Math.min(...calls.fillRect.filter(([x, y]) => x >= 12 && x <= 52 && y > 60 && y < 140).map(([, y]) => y));
+  };
+  const colours = (levels: Record<string, number>) => {
+    const seen: string[] = [];
+    const { ctx } = fakeCtx();
+    const rec = new Proxy(ctx, { set: (t, k, v) => ((k === 'fillStyle' && seen.push(String(v)), ((t as Record<string, unknown>)[k as string] = v)), true) });
+    const l = lot(0, { group: 'working', workers: [agent('w', { state: 'working' })] });
+    new TownScene(true).draw(rec, frame([l], 0, { levels }));
+    return seen;
+  };
+
+  it('a shack is lower than a house, a tower higher', () => {
+    const shack = top({ 'project:p0': 1 });
+    const house = top({ 'project:p0': 2 });
+    const tower = top({ 'project:p0': 4 });
+    expect(shack).toBeGreaterThan(house);
+    expect(tower).toBeLessThan(house);
+  });
+
+  it('flowers from level 3, a flag from level 5', () => {
+    expect(colours({ 'project:p0': 2 })).not.toContain(FLOWER_COLOR);
+    expect(colours({ 'project:p0': 3 })).toContain(FLOWER_COLOR);
+    expect(colours({ 'project:p0': 4 })).not.toContain(FLAG_COLOR);
+    expect(colours({ 'project:p0': 5 })).toContain(FLAG_COLOR);
+  });
+});
+
+describe('walking workers', () => {
+  const at = (scene: TownScene, id: string) => scene.workerPosition(id);
+
+  it('workers already there when the town opens stand at their spots', () => {
+    const scene = new TownScene(false);
+    const lots = [lot(0, { group: 'working', workers: [agent('a', { state: 'working' })] })];
+    scene.update(lots, 0.016, 0);
+    expect(at(scene, 'a')).toEqual(workerSpot(0, 0, 'working'));
+  });
+
+  it('a new worker walks in and reaches its spot', () => {
+    const scene = new TownScene(false);
+    scene.update([lot(0)], 0.016, 0);
+    const lots = [lot(0, { group: 'working', workers: [agent('b', { state: 'working' })] })];
+    scene.update(lots, 0.016, 16);
+    expect(at(scene, 'b')).not.toEqual(workerSpot(0, 0, 'working'));
+    for (let t = 0; t < 120; t++) scene.update(lots, 0.016, 32 + t * 16);
+    expect(at(scene, 'b')).toEqual(workerSpot(0, 0, 'working'));
+  });
+
+  it('an ended worker walks away and is gone after 1.5 s', () => {
+    const scene = new TownScene(false);
+    const lots = [lot(0, { group: 'working', workers: [agent('c', { state: 'working' })] })];
+    scene.update(lots, 0.016, 0);
+    scene.update([lot(0)], 0.016, 16);
+    for (let t = 0; t < 30; t++) scene.update([lot(0)], 0.016, 32 + t * 16);
+    expect(at(scene, 'c')).not.toBeNull();
+    for (let t = 0; t < 70; t++) scene.update([lot(0)], 0.016, 600 + t * 16);
+    expect(at(scene, 'c')).toBeNull();
+  });
+
+  it('ten workers ending together with their lot do not break drawing', () => {
+    const scene = new TownScene(false);
+    const many = [lot(0, { group: 'working', workers: Array.from({ length: 10 }, (_, i) => agent('m' + i, { state: 'working' })) })];
+    scene.update(many, 0.016, 0);
+    const { ctx } = fakeCtx();
+    scene.update([], 0.016, 16);
+    expect(() => scene.draw(ctx, frame([], 0))).not.toThrow();
+  });
+
+  it('with reduced motion new workers appear at their spot and ended ones go at once', () => {
+    const scene = new TownScene(true);
+    scene.update([lot(0)], 0.016, 0);
+    const lots = [lot(0, { group: 'working', workers: [agent('d', { state: 'working' })] })];
+    scene.update(lots, 0.016, 16);
+    expect(at(scene, 'd')).toEqual(workerSpot(0, 0, 'working'));
+    scene.update([lot(0)], 0.016, 32);
+    expect(at(scene, 'd')).toBeNull();
   });
 });

@@ -238,8 +238,15 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
 
   // Canvas loop.
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameInput = useRef({ lots, camX, viewW });
-  frameInput.current = { lots, camX, viewW };
+  // Repo levels by lot key, so buildings grow with their repo's XP.
+  const progress = useAppState((s) => s.progress);
+  const levels = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const [name, l] of Object.entries(progress?.repos ?? {})) out['project:' + name.toLowerCase()] = l.level;
+    return out;
+  }, [progress]);
+  const frameInput = useRef({ lots, camX, viewW, levels });
+  frameInput.current = { lots, camX, viewW, levels };
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -260,8 +267,8 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       last = t;
       if (!reduced) phase = (phase + dt / DAY_CYCLE_S) % 1;
       const f = frameInput.current;
-      scene.update(f.lots, dt, t);
-      scene.draw(ctx, { lots: f.lots, camX: f.camX, viewW: f.viewW, now: t, phase, reducedMotion: reduced });
+      scene.update(f.lots, dt, t, f.levels);
+      scene.draw(ctx, { lots: f.lots, camX: f.camX, viewW: f.viewW, now: t, phase, reducedMotion: reduced, levels: f.levels });
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

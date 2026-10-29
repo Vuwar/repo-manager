@@ -1,5 +1,6 @@
 import type { AgentSessionDto, AgentState } from '../../api/types';
 import { BW, GROUND, lotX, SCENE_H, SMALL_BW, visibleRange } from './camera';
+import { buildingTier, decorations } from './progress';
 import type { Lot } from './street';
 
 // Pixel art ported from docs/superpowers/specs/agent-town/prototype/index.html. All drawing is in logical
@@ -20,6 +21,8 @@ export interface TownFrame {
   /** Day/night position 0..1, as in the prototype. */
   phase: number;
   reducedMotion: boolean;
+  /** Repo level by lot key ("project:<name>"); missing means level 1. Buildings grow with it. */
+  levels?: Record<string, number>;
 }
 
 export const STATE_COLOR: Record<AgentState, string> = {
@@ -29,6 +32,15 @@ export const STATE_COLOR: Record<AgentState, string> = {
   done: '#7ee081',
   idle: '#8790c2',
 };
+/** Flower boxes (repo level 3+) and the roof flag (level 5+). */
+export const FLOWER_COLOR = '#ff6fa8';
+export const FLAG_COLOR = '#e5484d';
+/** Walking speed (scene px per second), and how far and how long a leaving worker walks before it is gone. */
+const WALK_SPEED = 38;
+const ARRIVE_FROM = 30;
+const LEAVE_DISTANCE = 40;
+const LEAVE_MS = 1500;
+
 /** Minimap and swatch colour for a lot with no session. */
 export const NO_SESSION_COLOR = '#4a5068';
 
@@ -107,7 +119,21 @@ const trees = Array.from({ length: 19 }, () => ({ x: Math.floor(rnd() * TILE), s
 const clouds = [{ x: 30, y: 26, w: 30, v: 2.2 }, { x: 150, y: 42, w: 22, v: 1.6 }, { x: 240, y: 18, w: 34, v: 2.8 }, { x: 96, y: 58, w: 18, v: 1.2 }];
 
 interface Particle { x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; c: string; s: number; k: 'spark' | 'conf' | 'smoke' | 'dark' | 'sweat' }
-interface WorkerAnim { state: AgentState; stateAt: number; hit: number; hitT: number; confetti: boolean }
+interface WorkerAnim {
+  state: AgentState;
+  stateAt: number;
+  hit: number;
+  hitT: number;
+  confetti: boolean;
+  /** Where it is drawn, and where it is walking to. */
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  session: AgentSessionDto;
+  /** Set once its session left the street: it walks away and is dropped LEAVE_MS later. */
+  leftAt: number | null;
+}
 
 /** Per-session animation state and particles, plus drawing of one frame. */
 export class TownScene {
@@ -118,29 +144,51 @@ export class TownScene {
   private night = 0;
   private tint = new Map<string, string>();
 
+  private started = false;
+  private levels: Record<string, number> = {};
+
   constructor(private readonly reducedMotion: boolean) {}
+
+  /** Where a worker is drawn now, or null when it is not on the street. */
+  workerPosition(id: string): [number, number] | null {
+    const a = this.anims.get(id);
+    return a ? [a.x, a.y] : null;
+  }
+
+  private levelOf(lot: Lot): number {
+    return this.levels[lot.key] ?? 1;
+  }
 
   particleCount(): number {
     return this.particles.length;
   }
 
-  /** Advances animations: state changes, hammer hits, confetti, smoke. */
-  update(lots: Lot[], dt: number, now: number): void {
+  /** Advances animations: walking, state changes, hammer hits, confetti, smoke. */
+  update(lots: Lot[], dt: number, now: number, levels?: Record<string, number>): void {
+    if (levels) this.levels = levels;
     const seen = new Set<string>();
     lots.forEach((lot, i) => {
       lot.workers.slice(0, MAX_WORKERS).forEach((w, k) => {
         seen.add(w.id);
+        const [tx, ty] = workerSpot(i, k, w.state);
         let a = this.anims.get(w.id);
         if (!a) {
-          a = { state: w.state, stateAt: now - 5000, hit: 0, hitT: 0, confetti: false };
+          // Workers already there when the town opens stand at their spots; later ones walk in from the side.
+          const walkIn = this.started && !this.reducedMotion;
+          a = { state: w.state, stateAt: now - 5000, hit: 0, hitT: 0, confetti: false, x: walkIn ? tx - ARRIVE_FROM : tx, y: ty, tx, ty, session: w, leftAt: null };
           this.anims.set(w.id, a);
         } else if (a.state !== w.state) {
           a.state = w.state;
           a.stateAt = now;
           a.confetti = w.state === 'done';
         }
+        a.session = w;
+        a.leftAt = null;
+        a.tx = tx;
+        a.ty = ty;
+        this.walk(a, dt);
         if (this.reducedMotion) return;
-        const [x, y] = workerSpot(i, k, w.state);
+        const [x, y] = [a.x, a.y];
         if (w.state === 'working') {
           a.hitT += dt;
           if (a.hitT > 0.22) {
@@ -158,14 +206,28 @@ export class TownScene {
       if (this.reducedMotion || !lot.workers.length) return;
       const rate = lot.group === 'working' ? 2.5 : lot.group === 'failed' ? 9 : 0;
       let acc = (this.smokeAcc.get(lot.key) ?? 0) + rate * dt;
-      const h = buildingHeight(lot), py = GROUND - h, px = lotX(i);
+      const h = buildingHeight(lot, this.levelOf(lot)), py = GROUND - h, px = lotX(i);
       while (acc >= 1) {
         acc -= 1;
         this.smoke(px + (roofStyle(lot.key) === 0 ? 32 : 31), py - 13, lot.group === 'failed');
       }
       this.smokeAcc.set(lot.key, acc);
     });
-    for (const id of this.anims.keys()) if (!seen.has(id)) this.anims.delete(id);
+    // Workers whose session left the street walk away, then go.
+    for (const [id, a] of this.anims) {
+      if (seen.has(id)) continue;
+      if (this.reducedMotion) {
+        this.anims.delete(id);
+        continue;
+      }
+      if (a.leftAt === null) {
+        a.leftAt = now;
+        a.tx = a.x + LEAVE_DISTANCE;
+      }
+      if (now - a.leftAt >= LEAVE_MS) this.anims.delete(id);
+      else this.walk(a, dt);
+    }
+    this.started = true;
     for (let k = this.particles.length - 1; k >= 0; k--) {
       const p = this.particles[k];
       p.life -= dt;
@@ -179,8 +241,21 @@ export class TownScene {
     }
   }
 
+  /** Steps a worker toward its target at walking speed (at once with reduced motion). */
+  private walk(a: WorkerAnim, dt: number): void {
+    const dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy), step = WALK_SPEED * dt;
+    if (this.reducedMotion || d <= step) {
+      a.x = a.tx;
+      a.y = a.ty;
+    } else {
+      a.x += (dx / d) * step;
+      a.y += (dy / d) * step;
+    }
+  }
+
   draw(ctx: Draw2D, frame: TownFrame): void {
     this.ctx = ctx;
+    if (frame.levels) this.levels = frame.levels;
     // Reduced motion: a frozen clock, so nothing blinks, twinkles or drifts.
     const f = frame.reducedMotion ? { ...frame, now: 0 } : frame;
     const phase = f.reducedMotion ? 0.42 : f.phase;
@@ -199,12 +274,18 @@ export class TownScene {
     this.drawGround(x0, x1);
     const [first, last] = visibleRange(f.camX, f.viewW, f.lots.length);
     for (let i = first; i <= last; i++) this.drawBuilding(f.lots[i], i);
-    const workers: [AgentSessionDto, number, number][] = [];
-    for (let i = first; i <= last; i++) f.lots[i].workers.slice(0, MAX_WORKERS).forEach((w, k) => workers.push([w, i, k]));
-    workers
-      .map(([w, i, k]) => ({ w, spot: workerSpot(i, k, w.state) }))
-      .sort((a, b) => a.spot[1] - b.spot[1])
-      .forEach(({ w, spot }) => this.drawWorker(w, spot, f.now, f.reducedMotion));
+    // Workers where they walk (a scene that never updated draws them at their spots).
+    const drawn = new Set<string>();
+    const workers: { w: AgentSessionDto; spot: [number, number] }[] = [];
+    for (const a of this.anims.values()) {
+      drawn.add(a.session.id);
+      if (a.x >= x0 - 12 && a.x <= x1 + 12) workers.push({ w: a.session, spot: [a.x, a.y] });
+    }
+    for (let i = first; i <= last; i++)
+      f.lots[i].workers.slice(0, MAX_WORKERS).forEach((w, k) => {
+        if (!drawn.has(w.id)) workers.push({ w, spot: workerSpot(i, k, w.state) });
+      });
+    workers.sort((a, b) => a.spot[1] - b.spot[1]).forEach(({ w, spot }) => this.drawWorker(w, spot, f.now, f.reducedMotion));
     for (let i = first; i <= last; i++) this.drawLit(f.lots[i], i, f.now);
     this.drawLamps(first, last, L);
     this.drawParticles(x0, x1);
@@ -322,7 +403,9 @@ export class TownScene {
 
   private drawBuilding(lot: Lot, i: number): void {
     const small = lot.group === 'none';
-    const w = small ? SMALL_BW : BW, h = buildingHeight(lot);
+    const level = this.levelOf(lot);
+    const tier = small ? 'house' : buildingTier(level);
+    const w = small ? SMALL_BW : BW, h = buildingHeight(lot, level);
     const px = lotX(i) + (BW - w) / 2, py = GROUND - h;
     const base = PAL[paletteFor(lot.key)];
     const pal = small ? (Object.fromEntries(Object.entries(base).map(([k, v]) => [k, mix(v, NO_SESSION_COLOR, 0.35)])) as unknown as Palette) : base;
@@ -331,7 +414,7 @@ export class TownScene {
     for (let ly = py + 5; ly < GROUND - 3; ly += 6) this.R(px + 2, ly, w - 7, 1, C(pal.line));
     this.R(px + w - 5, py, 5, h, C(pal.shade)); this.R(px, py, 2, h, C(pal.light));
     this.R(px, GROUND - 2, w, 2, C('#6b6b78'));
-    const windows = small ? [[5, 6], [w - 11, 6]] : WIN;
+    const windows = small ? [[5, 6], [w - 11, 6]] : windowsFor(tier);
     windows.forEach(([ox, oy]) => {
       const wx = px + ox, wy = py + oy;
       this.R(wx - 1, wy - 1, 8, 9, C('#f3ead2'));
@@ -341,13 +424,31 @@ export class TownScene {
     const door = px + w / 2 - 4;
     this.R(door, GROUND - 12, 8, 12, C('#5b3a2a')); this.R(door + 1, GROUND - 11, 6, 5, C('#6e4733'));
     this.R(door + 6, GROUND - 6, 1, 1, C('#e0c070'));
-    if (roofStyle(lot.key) === 0) {
+    if (!small) {
+      const deco = decorations(level);
+      if (deco.flowers)
+        for (const [ox, oy] of windows.filter(([, oy]) => oy === Math.max(...windows.map((q) => q[1])))) {
+          this.R(px + ox - 1, py + oy + 8, 8, 2, C('#6b4a2e'));
+          this.R(px + ox, py + oy + 7, 2, 1, FLOWER_COLOR);
+          this.R(px + ox + 4, py + oy + 7, 2, 1, C('#ffd36b'));
+        }
+    }
+    if (tier === 'shack') {
+      // A straw roof, low and flat.
+      this.R(px - 3, py - 4, w + 6, 4, C('#d8b05a'));
+      this.R(px - 3, py - 5, w + 6, 1, C('#e8c878'));
+      this.R(px - 3, py, w + 6, 1, C('#a8823a'));
+    } else if (roofStyle(lot.key) === 0) {
       for (let r = 0; r < 11 && w + 6 - 4 * r > 0; r++) this.R(px - 3 + 2 * r, py - 1 - r, w + 6 - 4 * r, 1, C(r % 3 === 0 ? pal.roofL : pal.roof));
       this.R(px - 3, py, w + 6, 1, C(pal.shade2));
       if (!small) { this.R(px + 30, py - 11, 5, 7, C('#7a4a3a')); this.R(px + 29, py - 12, 7, 2, C('#5e3528')); this.R(px + 20, py - 16, 1, 6, C('#444a63')); }
     } else {
       this.R(px - 2, py - 3, w + 4, 3, C(pal.roof)); this.R(px - 2, py - 5, w + 4, 2, C(pal.roofL)); this.R(px - 2, py, w + 4, 1, C(pal.shade2));
       if (!small) { this.R(px + 30, py - 11, 3, 6, C('#7b7f93')); this.R(px + 29, py - 12, 5, 1, C('#9aa0b5')); this.R(px + 23, py - 13, 1, 8, C('#444a63')); }
+    }
+    if (!small && decorations(level).flag) {
+      this.R(px + 4, py - 22, 1, 18, C('#5a5f73'));
+      this.R(px + 5, py - 22, 7, 4, FLAG_COLOR);
     }
     if (lot.temporary) {
       // Sign post right of the door; the "not in RepoManager" text is HTML over the canvas.
@@ -357,9 +458,10 @@ export class TownScene {
 
   private drawLit(lot: Lot, i: number, now: number): void {
     if (lot.group === 'none') return;
-    const st = lot.group, px = lotX(i), py = GROUND - buildingHeight(lot);
+    const level = this.levelOf(lot);
+    const st = lot.group, px = lotX(i), py = GROUND - buildingHeight(lot, level);
     if (st !== 'idle')
-      WIN.forEach(([ox, oy], k) => {
+      windowsFor(buildingTier(level)).forEach(([ox, oy], k) => {
         const col = winColor(st, k, now), wx = px + ox, wy = py + oy;
         if (!col) return;
         this.alpha(0.16); this.R(wx - 2, wy - 2, 10, 11, col); this.alpha(1);
@@ -466,8 +568,19 @@ export class TownScene {
 }
 
 /** Building height: steady per lot, shorter for repos with no session. */
-function buildingHeight(lot: Lot): number {
-  return lot.group === 'none' ? 26 : 34 + (hash(lot.key) % 3) * 4;
+/** Building height: lower for a shack (repo level 1), an extra floor for a tower (4+), 26 for repos with no session. */
+function buildingHeight(lot: Lot, level: number): number {
+  if (lot.group === 'none') return 26;
+  const tier = buildingTier(level);
+  if (tier === 'shack') return 26 + (hash(lot.key) % 2) * 2;
+  const house = 34 + (hash(lot.key) % 3) * 4;
+  return tier === 'tower' ? house + 14 : house;
+}
+
+/** Window positions: one row for a shack, two for a house, three for a tower. */
+function windowsFor(tier: 'shack' | 'house' | 'tower'): number[][] {
+  if (tier === 'shack') return WIN.slice(0, 2);
+  return tier === 'tower' ? [...WIN, [7, 32], [27, 32]] : WIN;
 }
 
 /** A worker's hat and shirt colours, the same on the street and in its portrait. */
