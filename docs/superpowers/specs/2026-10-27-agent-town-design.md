@@ -1,7 +1,7 @@
 # Agent Town design
 
-Date: 2026-10-27 (updated 2026-10-28 with what was decided while building plans 1 to 3)
-Status: plans 1 to 3 built (backend, town screen, dialogue and permissions); plans 4 and 5 to do
+Date: 2026-10-27 (updated 2026-10-28 with what was decided while building plans 1 to 3; updated 2026-10-29 with past sessions and new sessions)
+Status: plans 1 to 5 built; plan 6 (past sessions and new sessions) to do
 
 ## Intent
 
@@ -19,13 +19,17 @@ The guiding rule, in the user's words: nothing should block or delay real work. 
 - Send a session its next instruction from the town, at any time while the session is open, for both desktop and terminal sessions.
 - Feel like a small RPG: dialogue boxes, a player character, XP and levels, a quest log.
 - Get the user's attention when the town is not on screen.
+- Reread past sessions (desktop and terminal) without starting Claude or spending tokens.
+- Pick up a past session: desktop sessions resume in the desktop app, terminal sessions continue in a new terminal session with a handoff.
+- Start a new session in a repo, in a terminal or in the desktop app, chosen each time.
 
 ## Non-goals
 
 - Replacing the session windows. The town is an extra way in, never the only one.
 - Remote sessions (other machines, cloud). Same machine only.
 - Answering `AskUserQuestion` / elicitation dialogs from the town (v1 shows the question and an "Open window" button).
-- Starting new sessions from the town.
+- Resuming a terminal session in place (`claude --resume`): it reloads the whole old conversation and costs tokens. Terminal sessions are continued with a handoff instead.
+- Deleting, renaming or archiving sessions from the town.
 
 ## Anti-goals (failure even if it works)
 
@@ -169,6 +173,49 @@ Plans 1 to 3 are built and pushed: the backend (hooks, registry, inbox, permissi
 - **Keyboard.** Click, Tab (only when someone needs the user) and the quest log (Q) open a box; Esc closes it. Town keys never fire while typing in the box. A half-typed message survives the quest log.
 - **Focus reporting** was planned for the attention phase but moved into plan 3, because the permission menu cannot work without it.
 - **Not built yet:** workers walking in and away (plan 5), attention when the town is not focused (plan 4), the "Agent Town" setting in the app (today only `devm claude-setup --no-town`; plan 4), game elements (plan 5).
+
+## Past sessions and new sessions (added 2026-10-29)
+
+Asked for by the user: see older sessions to reread them and to pick up the work, and start a new session from the town, choosing Terminal or Desktop each time. Viewing must not spend tokens; the user named `claude --resume` in a terminal as the cost they want to avoid.
+
+### What was found on this machine (2026-10-29, desktop app 4.29.0)
+
+- Every Claude Code session, desktop or terminal, writes its transcript to `~/.claude/projects/<folder slug>/<session id>.jsonl`. Each line carries `entrypoint` (`cli` for terminal) and `cwd`. Title lines (`custom-title`, `agent-name`, `ai-title`) are already read by `TranscriptReader`.
+- The desktop app keeps one file per session in `%APPDATA%\Claude\claude-code-sessions\<account>\<org>\local_<id>.json` with `sessionId` (`local_...`), `cliSessionId` (the transcript's id), `cwd`, `title`, `isArchived`, `createdAt` and `lastActivityAt` (epoch ms). This tells which transcripts came from the desktop and gives the id the `continue` link needs.
+- The desktop app handles `claude://code/continue?session=local_...` (already used by "Open window") and `claude://code/new?folder=<url-encoded path>` (a new session in that folder). Both are undocumented and found in the app bundle. Whether the `new` link takes a first prompt is not confirmed.
+- Windows Terminal (`wt.exe`) is installed.
+
+### Decisions made with the user
+
+- **Reread**: a past session opens read-only in the town. It shows the user's prompts and Claude's replies (Markdown, as in the dialogue box) read from the transcript file. No Claude process starts, no tokens are spent.
+- **Pick up a desktop session**: "Resume" opens it in the desktop app with the `continue` link. Same session, full memory.
+- **Pick up a terminal session**: "Continue in new session" starts a new terminal session in the same folder whose first message is a handoff built by RepoManager from the transcript, with no Claude call. Never `claude --resume`.
+- **New session**: "New session" on a repo, with a Terminal or Desktop choice each time.
+- The non-goal "Starting new sessions from the town" is dropped.
+
+### Claude's calls (the user accepted the picture)
+
+- **Repo panel**: clicking a building (not a worker) opens a panel for that repo with the two "New session" buttons and the list of past sessions, newest first by last activity. Each row: title, date and time, a Desktop or Terminal tag. Worktree sessions are listed under the main repo with the worktree name. Archived desktop sessions are listed, marked archived. Sessions that are live in the town are not listed (their worker is the way in). Esc closes the panel; the panel follows the town's keyboard rules (no town keys while typing).
+- **Which sessions belong to a repo**: a transcript belongs to the RepoManager project whose folder (or one of whose worktrees) contains the transcript's `cwd`, using the same mapping as live sessions (`ConfigService.InstanceForPath`). A session is "desktop" when a desktop index file names its id as `cliSessionId`, else "terminal". Transcripts of subagents and sessions with no user prompt are not listed.
+- **Transcript view**: user prompts and assistant text only; tool calls are shown as one short line each ("Ran `npm test`", "Edited `App.tsx`") or left out. Long sessions load the last part first, with "Load earlier".
+- **Handoff message**, built from the transcript, kept short (a few KB at most):
+  - a first line saying this continues an earlier session, with its title and date;
+  - the user's prompts in order, each shortened;
+  - Claude's last reply in full (shortened if very long);
+  - the transcript's full path, with a note to read it only if details are needed.
+  It is shown in the panel before starting, so the user can edit it or add the next instruction.
+- **Starting a terminal session**: `wt.exe -d <folder> claude <handoff or first prompt>`. The prompt is passed as one argument with no shell in between, so nothing in it is interpreted. If `wt.exe` is missing, a new `cmd` window in the folder runs `claude` the same way. The new session shows up in the town through its hooks like any other.
+- **Starting a desktop session**: the `new?folder=` link. No first prompt for now; the user types it in the desktop app. If the builder confirms the link takes a prompt (for example `q=`), it may be used.
+- **New session prompt (terminal)**: an optional first-prompt box under the Terminal button. Empty starts `claude` with no prompt.
+- **Failures**: a link or process that fails to open says so in the panel and keeps any typed text. Index or transcript files that cannot be read are skipped, never shown as errors per row.
+- **Safety**: the daemon only reads `.jsonl` files under `~/.claude/projects` and `.json` files under the desktop app's `claude-code-sessions` folder; the web UI asks by session id, never by path. Paths and prompts go to the started process as arguments, never through a shell string. Opening a session or starting one is a user click only, never automatic.
+
+### Left to the builder (this section)
+
+- Endpoint paths and DTO shapes (for example `GET /api/town/history?project=`, `GET /api/town/history/<id>`, `POST /api/town/start`).
+- Caching the session list (transcripts can be large; read only what the list needs, such as the head for titles and the file time for dates).
+- How many prompts the handoff includes and how much each is shortened.
+- Panel layout and art, in the town's pixel style.
 
 ## Left to the builder
 
