@@ -64,7 +64,9 @@ export async function loadAgents(): Promise<void> {
 /** Fetches /api/town/progress (XP). On failure the town shows no levels until the next event. */
 export async function loadProgress(): Promise<void> {
   try {
-    dispatch({ type: 'progressLoaded', progress: await api.townProgress() });
+    const progress = await api.townProgress();
+    // Only a real answer: an older daemon or a proxy page must not break the town.
+    if (progress && typeof progress === 'object' && 'player' in progress) dispatch({ type: 'progressLoaded', progress });
   } catch {
     /* shown via connection state */
   }

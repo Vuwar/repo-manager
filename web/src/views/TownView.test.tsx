@@ -402,6 +402,62 @@ describe('TownView', () => {
       expect(screen.getByRole('button', { name: 'Sounds' }).getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('shows the player level in the top bar', () => {
+      dispatch({ type: 'progressLoaded', progress: { player: { xp: 60, level: 2, levelStart: 50, nextLevel: 150 }, repos: {} } });
+      setup();
+      expect(screen.getByText('Lv 2 · 60 XP')).toBeTruthy();
+    });
+
+    it('an award pops up "+20 XP" for 1.5 s and plays the reward', async () => {
+      const made: unknown[] = [];
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          currentTime = 0;
+          destination = {};
+          constructor() {
+            made.push(this);
+          }
+          createOscillator() {
+            return { type: '', frequency: { value: 0 }, connect: () => {}, start: () => {}, stop: () => {} };
+          }
+          createGain() {
+            return { gain: { value: 0, setValueAtTime: () => {}, linearRampToValueAtTime: () => {} }, connect: () => {} };
+          }
+        },
+      );
+      vi.useFakeTimers();
+      setup();
+      await act(async () => {});
+      const progress = { player: { xp: 20, level: 1, levelStart: 0, nextLevel: 50 }, repos: {} };
+      act(() => dispatch({ type: 'progress', progress, award: { kind: 'answer', amount: 20, sessionId: 's' }, at: Date.now() }));
+      expect(screen.getByText('+20 XP')).toBeTruthy();
+      expect(made).toHaveLength(1);
+      act(() => vi.advanceTimersByTime(1600));
+      expect(screen.queryByText('+20 XP')).toBeNull();
+      vi.unstubAllGlobals();
+    });
+
+    it('no reward sound with Sounds off', async () => {
+      const made: unknown[] = [];
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          constructor() {
+            made.push(this);
+          }
+        },
+      );
+      api.townSettings.mockResolvedValueOnce({ tray: true, notifications: true, sound: false, hooks: true });
+      setup();
+      await act(async () => {});
+      const progress = { player: { xp: 40, level: 1, levelStart: 0, nextLevel: 50 }, repos: {} };
+      act(() => dispatch({ type: 'progress', progress, award: { kind: 'send', amount: 5, sessionId: 's' }, at: Date.now() }));
+      expect(screen.getByText('+5 XP')).toBeTruthy();
+      expect(made).toHaveLength(0);
+      vi.unstubAllGlobals();
+    });
+
     it('reports focus while mounted', async () => {
       vi.spyOn(document, 'hasFocus').mockReturnValue(true);
       api.townFocus.mockClear();

@@ -3776,3 +3776,33 @@ details.advanced[open] {
 .town-settings-note.bad {
   color: #ff8a7a;
 }
+
+.town-level {
+  color: #ffc857;
+  font-weight: bold;
+}
+.town-xp {
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 4;
+  color: #ffc857;
+  font-weight: bold;
+  text-shadow: 0 1px 0 #151a38, 0 0 4px #151a38;
+  pointer-events: none;
+  animation: town-xp-float 1.5s ease-out forwards;
+}
+@keyframes town-xp-float {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .town-xp {
+    animation: none;
+  }
+}

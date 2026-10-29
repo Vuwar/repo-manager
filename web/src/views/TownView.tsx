@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { postFullscreen } from '../lib/host';
 import { followCamera, nearestWorker, stepBoss, type Boss } from '../lib/town/boss';
+import { levelText } from '../lib/town/progress';
+import { reward } from '../lib/town/reward';
 import { inOrder, startFocusReporting } from '../lib/town/focus';
 import { questsFor } from '../lib/town/quests';
 import { useNow } from '../lib/useNow';
@@ -35,6 +37,10 @@ const CLICK_SLOP_PX = 4;
 /** Where the boss starts and where Home sends it (scene px), and its movement tick. */
 const BOSS_HOME = 20;
 const BOSS_TICK_MS = 16;
+/** XP pop-ups: how long they show, and where (scene y above the boss's head; the stage starts below the top bar). */
+const POPUP_MS = 1500;
+const BOSS_POPUP_Y = 140;
+const TOP_BAR_PX = 32;
 
 const swatch = (g: LotGroup) => (g === 'none' ? NO_SESSION_COLOR : STATE_COLOR[g]);
 
@@ -173,6 +179,23 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     if (!r.ok && before) setSettings(before);
     return r;
   };
+  // XP pop-ups: each new award floats above the boss for POPUP_MS; answering or sending plays the reward.
+  const awards = useAppState((s) => s.awards);
+  const seenAwards = useRef(new Set(awards));
+  const [popups, setPopups] = useState<{ key: number; text: string }[]>([]);
+  const popupSeq = useRef(0);
+  const soundOn = useRef(true);
+  soundOn.current = settings?.sound ?? true;
+  useEffect(() => {
+    for (const a of awards) {
+      if (seenAwards.current.has(a)) continue;
+      seenAwards.current.add(a);
+      const key = ++popupSeq.current;
+      setPopups((p) => [...p, { key, text: `+${a.amount} XP` }]);
+      setTimeout(() => setPopups((p) => p.filter((x) => x.key !== key)), POPUP_MS);
+      if ((a.kind === 'answer' || a.kind === 'send') && soundOn.current) reward();
+    }
+  }, [awards]);
   const toggleSound = () => void (settings && saveSettings({ ...settings, sound: !settings.sound }));
   // A notification click the shell could not route opens that worker's dialogue.
   useEffect(() => {
@@ -337,6 +360,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       <header className="town-bar">
         <span className="town-title">Agent Town</span>
         <span className="town-counts">{countsText(lots)}</span>
+        {progress?.player && <span className="town-level">{levelText(progress.player)}</span>}
         <button
           type="button"
           className="town-leave"
@@ -398,6 +422,11 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
           </button>
         ))}
       </div>
+      {popups.map((p, i) => (
+        <span key={p.key} className="town-xp" style={{ left: toPx(bossX), top: (BOSS_POPUP_Y - i * 8) * zoom + TOP_BAR_PX }}>
+          {p.text}
+        </span>
+      ))}
       <nav className="town-minimap" aria-label="Minimap">
         {lots.length > 0 && (
           <span
