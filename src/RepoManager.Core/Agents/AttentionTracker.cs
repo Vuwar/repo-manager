@@ -13,19 +13,22 @@ public sealed record AttentionUpdate(AttentionNotice? Notice, AttentionSound? So
 /// <summary>
 /// Decides when RepoManager gets the user's attention for Claude sessions. A session entering "waiting" gets one
 /// notification and the needs-you sound; entering "done" gets the softer sound and the tray's done badge. While the
-/// town is focused there are no notifications and no blinking. Sounds are limited to one per <see cref="SoundGap"/>.
+/// town is focused there are no notifications and no blinking. Sounds are limited to one per <see cref="SoundGap"/>
+/// and notifications to one per <see cref="NoticeGap"/> (the blinking tray covers the rest of a burst).
 /// No I/O: the shell carries the decisions out.
 /// </summary>
 public sealed class AttentionTracker(Func<DateTimeOffset> clock)
 {
     public static readonly TimeSpan SoundGap = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan NoticeGap = TimeSpan.FromSeconds(10);
     private const int BodyMax = 200;
 
     private readonly object _gate = new();
     private readonly Dictionary<string, string> _states = new(StringComparer.Ordinal);
     private readonly HashSet<string> _waiting = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _doneUnseen = new(StringComparer.Ordinal);
     private DateTimeOffset _lastSound = DateTimeOffset.MinValue;
-    private bool _doneBadge;
+    private DateTimeOffset _lastNotice = DateTimeOffset.MinValue;
 
     public AttentionUpdate OnSession(AgentSessionDto s, bool townFocused, TownSettings settings)
     {
@@ -39,18 +42,23 @@ public sealed class AttentionTracker(Func<DateTimeOffset> clock)
             {
                 if (_waiting.Add(s.Id))
                 {
-                    if (settings.Notifications && !townFocused) notice = NoticeFor(s);
+                    if (settings.Notifications && !townFocused && clock() - _lastNotice >= NoticeGap)
+                    {
+                        notice = NoticeFor(s);
+                        _lastNotice = clock();
+                    }
                     if (settings.Sound) sound = Sound(AttentionSound.NeedsYou);
                 }
             }
             else
             {
                 _waiting.Remove(s.Id);
+                if (s.State != "done") _doneUnseen.Remove(s.Id);
                 // A session first seen already done (daemon restarted) did not just finish.
                 if (s.State == "done" && known && before != "done")
                 {
                     if (settings.Sound) sound = Sound(AttentionSound.Done);
-                    if (!townFocused) _doneBadge = true;
+                    if (!townFocused) _doneUnseen.Add(s.Id);
                 }
             }
             return Update(notice, sound, townFocused, settings);
@@ -63,6 +71,7 @@ public sealed class AttentionTracker(Func<DateTimeOffset> clock)
         {
             _states.Remove(sessionId);
             _waiting.Remove(sessionId);
+            _doneUnseen.Remove(sessionId);
             return Update(null, null, townFocused, settings);
         }
     }
@@ -72,18 +81,13 @@ public sealed class AttentionTracker(Func<DateTimeOffset> clock)
     {
         lock (_gate)
         {
-            if (townFocused) _doneBadge = false;
+            if (townFocused) _doneUnseen.Clear();
             return Update(null, null, townFocused, settings);
         }
     }
 
-    public void Seen()
-    {
-        lock (_gate) _doneBadge = false;
-    }
-
     private AttentionUpdate Update(AttentionNotice? notice, AttentionSound? sound, bool focused, TownSettings settings) =>
-        new(notice, sound, settings.Tray && !focused && _waiting.Count > 0, _doneBadge && !focused);
+        new(notice, sound, settings.Tray && !focused && _waiting.Count > 0, settings.Tray && !focused && _doneUnseen.Count > 0);
 
     /// <summary>The sound, unless one played within <see cref="SoundGap"/>.</summary>
     private AttentionSound? Sound(AttentionSound s)

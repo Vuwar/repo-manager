@@ -47,7 +47,7 @@ public static class ClaudeIntegration
             var hooks = root?["town"]?["hooks"] ?? root?["Town"]?["Hooks"];
             return hooks is not JsonValue v || !v.TryGetValue<bool>(out var on) || on;
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
         {
             return true;
         }
@@ -63,8 +63,9 @@ public static class ClaudeIntegration
         Console.WriteLine(changed ? $"hook: added PreToolUse hook to {settingsPath}" : "hook: already present");
         if (town)
             Console.WriteLine(UpdateSettings(settingsPath, root => AddTownHooks(root, $"\"{devmPath}\" town-hook")) ? "town: added hooks" : "town: already present");
-        else if (UpdateSettings(settingsPath, RemoveTownHooks))
-            Console.WriteLine("town: hooks removed");
+        else
+            Console.WriteLine((UpdateSettings(settingsPath, RemoveTownHooks) ? "town: hooks removed" : "town: not installed")
+                + (TownHooksSetting() ? "" : " (Agent Town hooks are turned off in RepoManager's town settings)"));
 
         var mdPath = Path.Combine(ClaudeDir, "CLAUDE.md");
         Console.WriteLine(WriteBlock(mdPath) ? $"CLAUDE.md: added RepoManager block to {mdPath}" : "CLAUDE.md: block up to date");

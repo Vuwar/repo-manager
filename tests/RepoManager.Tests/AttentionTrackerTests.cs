@@ -48,7 +48,7 @@ public class AttentionTrackerTests
         _t.OnSession(S("a", "waiting"), false, On);
         Later();
         _t.OnSession(S("a", "working"), false, On);
-        Later();
+        Later(AttentionTracker.NoticeGap.TotalSeconds);
         Assert.NotNull(_t.OnSession(S("a", "waiting"), false, On).Notice);
     }
 
@@ -121,7 +121,7 @@ public class AttentionTrackerTests
         Later(1);
         var second = _t.OnSession(S("b", "waiting"), false, On);
         Assert.Null(second.Sound);
-        Assert.NotNull(second.Notice);
+        Assert.Null(second.Notice); // within the notice gap too
         Later(1.5);
         Assert.NotNull(_t.OnSession(S("c", "waiting"), false, On).Sound);
     }
@@ -134,6 +134,39 @@ public class AttentionTrackerTests
         Assert.Null(u.Notice);
         Assert.Null(u.Sound);
         Assert.False(u.Blink);
+    }
+
+    [Fact]
+    public void Notices_AtMostOnePerTenSeconds_NoBalloonStorm()
+    {
+        Assert.NotNull(_t.OnSession(S("a", "waiting"), false, On).Notice);
+        Later(1);
+        Assert.Null(_t.OnSession(S("b", "waiting"), false, On).Notice);
+        Later(1);
+        Assert.Null(_t.OnSession(S("c", "waiting"), false, On).Notice);
+        Later(9);
+        Assert.NotNull(_t.OnSession(S("d", "waiting"), false, On).Notice);
+    }
+
+    [Fact]
+    public void DoneBadge_FollowsTheTraySetting()
+    {
+        _t.OnSession(S("a", "working"), false, On);
+        Later();
+        Assert.False(_t.OnSession(S("a", "done"), false, new TownSettings { Tray = false }).DoneBadge);
+    }
+
+    [Fact]
+    public void DoneBadge_GoesWhenThatSessionWorksAgainOrEnds()
+    {
+        _t.OnSession(S("a", "working"), false, On);
+        Later();
+        Assert.True(_t.OnSession(S("a", "done"), false, On).DoneBadge);
+        Later();
+        Assert.False(_t.OnSession(S("a", "working"), false, On).DoneBadge);
+        Later();
+        Assert.True(_t.OnSession(S("a", "done"), false, On).DoneBadge);
+        Assert.False(_t.OnEnded("a", false, On).DoneBadge);
     }
 
     [Fact]

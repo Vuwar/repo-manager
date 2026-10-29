@@ -14,6 +14,8 @@ public sealed class DaemonFixture : IAsyncLifetime
 {
     public string Home { get; } = Path.Combine(Path.GetTempPath(), "rm-tests", "d-" + Guid.NewGuid().ToString("N")[..8]);
     public string Project => Path.Combine(Home, "demo");
+    /// <summary>Claude Code's config folder for everything the daemon runs: never the user's real ~/.claude.</summary>
+    public string ClaudeDir => Path.Combine(Home, "claude");
     public int ApiPort { get; } = TestEnv.FreePort();
     public DaemonHost Host { get; private set; } = null!;
     public HttpClient Http { get; private set; } = null!;
@@ -34,6 +36,11 @@ public sealed class DaemonFixture : IAsyncLifetime
         File.WriteAllText(Path.Combine(Home, "registry.json"),
             JsonSerializer.Serialize(new RegistryFile { Projects = [new RegistryProject { Path = Project }] }, Protocol.Json));
 
+        // The town's hook setting runs `devm claude-setup`; point it at the built devm and a temp Claude folder.
+        Directory.CreateDirectory(ClaudeDir);
+        Environment.SetEnvironmentVariable("CLAUDE_CONFIG_DIR", ClaudeDir);
+        Environment.SetEnvironmentVariable("REPOMANAGER_DEVM", CliTests.DevmExe);
+        Environment.SetEnvironmentVariable("REPOMANAGER_HOME", Home);
         Host = new DaemonHost(Home, 0, watchConfig: false, Harness.FastOptions);
         await Host.StartAsync();
         Http = Client(Host.Token);

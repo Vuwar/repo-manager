@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using RepoManager.Contracts;
 using RepoManager.Core.Git;
 

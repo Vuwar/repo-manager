@@ -102,6 +102,14 @@ public sealed class MainForm : Form
             var root = doc.RootElement;
             switch (root.GetProperty("type").GetString())
             {
+                case "ready":
+                    _pageReady = true;
+                    if (_pendingOpen is { } pending)
+                    {
+                        _pendingOpen = null;
+                        OpenSessionInTown(pending);
+                    }
+                    break;
                 case "mode":
                     SetMode(root.GetProperty("mode").GetString() ?? "");
                     break;
@@ -265,9 +273,17 @@ public sealed class MainForm : Form
     /// <summary>Asks the page to open a session's dialogue in the town (a notification click it could not route).</summary>
     public void OpenSessionInTown(string sessionId)
     {
-        if (_web?.CoreWebView2 is not { } core) return;
+        // A window opened just now is still starting WebView2: hold the request until the page says it listens.
+        if (!_pageReady || _web?.CoreWebView2 is not { } core)
+        {
+            _pendingOpen = sessionId;
+            return;
+        }
         core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "openSession", id = sessionId }));
     }
+
+    private bool _pageReady;
+    private string? _pendingOpen;
 
     private void PostWindowFocus(bool focused)
     {

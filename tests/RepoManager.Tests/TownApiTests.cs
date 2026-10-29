@@ -233,6 +233,25 @@ public class TownApiTests(DaemonFixture f)
     }
 
     [Fact]
+    public async Task Settings_HooksOff_RemovesTheTownHooks_OnPutsThemBack()
+    {
+        var settings = Path.Combine(f.ClaudeDir, "settings.json");
+        try
+        {
+            var off = await f.Post("api/town/settings", new TownSettingsDto(true, true, true, false));
+            Assert.True(off.Ok, off.Error);
+            Assert.DoesNotContain("town-hook", File.ReadAllText(settings));
+            var on = await f.Post("api/town/settings", new TownSettingsDto(true, true, true, true));
+            Assert.True(on.Ok, on.Error);
+            Assert.Contains("town-hook", File.ReadAllText(settings));
+        }
+        finally
+        {
+            await f.Post("api/town/settings", new TownSettingsDto(true, true, true, true));
+        }
+    }
+
+    [Fact]
     public async Task Open_UnknownSession_Fails() =>
         Assert.False((await f.Post("api/town/open", new TownOpenRequest(NewId()))).Ok);
 
