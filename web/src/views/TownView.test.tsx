@@ -147,12 +147,38 @@ describe('TownView', () => {
     expect(labels()[0]).toBe('p39');
   });
 
-  it('pans with the arrow keys', () => {
+  const bossX = () => Number(document.querySelector('.town-stage')!.getAttribute('data-boss-x'));
+
+  it('holding an arrow walks the boss and the camera follows', () => {
+    vi.useFakeTimers();
     const projects = Array.from({ length: 40 }, (_, i) => p('p' + String(i).padStart(2, '0')));
     setup(projects);
+    const start = bossX();
     expect(labels()).toContain('p00');
-    for (let i = 0; i < 4; i++) fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    act(() => vi.advanceTimersByTime(4000));
+    fireEvent.keyUp(window, { key: 'ArrowRight' });
+    expect(bossX()).toBeGreaterThan(start + 300);
     expect(labels()).not.toContain('p00');
+    const stopped = bossX();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(bossX()).toBe(stopped);
+  });
+
+  it('Enter next to a worker opens its box', () => {
+    setup(undefined, [agent('e1', { project: 'alpha', state: 'idle' })]);
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('ALPHA · Session A');
+  });
+
+  it('Enter far from any worker does nothing', () => {
+    vi.useFakeTimers();
+    setup(undefined, [agent('e1', { project: 'gamma', state: 'idle' })]);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    act(() => vi.advanceTimersByTime(1500));
+    fireEvent.keyUp(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('uses whole device pixels at 150% display scaling', () => {
@@ -225,6 +251,17 @@ describe('TownView', () => {
       clickWorker(0, 0, 'idle');
       expect(dialog()?.getAttribute('aria-label')).toBe('ALPHA · Session A');
       expect(document.querySelector('.town-stage')!.classList.contains('town-dim')).toBe(true);
+    });
+
+    it('clicking a far worker opens its box at once and the boss runs over', () => {
+      vi.useFakeTimers();
+      setup(undefined, [agent('far', { project: 'alpha', state: 'done' }), agent('x', { project: 'gamma', state: 'idle' })]);
+      // alpha (done) sorts before gamma (idle): gamma is lot 1
+      clickWorker(1, 0, 'idle');
+      expect(dialog()?.getAttribute('aria-label')).toBe('GAMMA · Session A');
+      const before = bossX();
+      act(() => vi.advanceTimersByTime(3000));
+      expect(bossX()).toBeGreaterThan(before);
     });
 
     it('a drag does not open a dialogue', () => {

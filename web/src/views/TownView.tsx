@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { postFullscreen } from '../lib/host';
+import { followCamera, nearestWorker, stepBoss, type Boss } from '../lib/town/boss';
 import { inOrder, startFocusReporting } from '../lib/town/focus';
 import { questsFor } from '../lib/town/quests';
 import { useNow } from '../lib/useNow';
@@ -9,7 +10,6 @@ import { QuestLog } from './town/QuestLog';
 import { TownSettings } from './town/TownSettings';
 import type { TownSettingsDto } from '../api/types';
 import {
-  ARROW_PAN,
   BW,
   cameraToShow,
   clampCamera,
@@ -32,6 +32,9 @@ import { useAppState } from '../state/store';
 const DAY_CYCLE_S = 150;
 /** Pointer travel (CSS px) below which a press and release counts as a click, not a drag. */
 const CLICK_SLOP_PX = 4;
+/** Where the boss starts and where Home sends it (scene px), and its movement tick. */
+const BOSS_HOME = 20;
+const BOSS_TICK_MS = 16;
 
 const swatch = (g: LotGroup) => (g === 'none' ? NO_SESSION_COLOR : STATE_COLOR[g]);
 
@@ -112,7 +115,34 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
   const home = () => {
     setCam(0);
     setShown(wanted);
+    moveBoss({ x: BOSS_HOME, target: null });
   };
+
+  // The boss: arrow keys held walk it (the camera follows), a clicked worker makes it run over. Its own small loop
+  // runs only while it moves, so a standing town costs nothing.
+  const boss = useRef<Boss>({ x: BOSS_HOME, target: null });
+  const [bossX, setBossX] = useState(BOSS_HOME);
+  const held = useRef<-1 | 0 | 1>(0);
+  const bossTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geometry = useRef({ world, viewW });
+  geometry.current = { world, viewW };
+  const moveBoss = (b: Boss) => {
+    boss.current = b;
+    setBossX(b.x);
+    const g = geometry.current;
+    setCam((c) => followCamera(clampCamera(c, g.world, g.viewW), b.x, g.viewW, g.world));
+  };
+  const runBoss = () => {
+    if (bossTimer.current) return;
+    const tick = () => {
+      bossTimer.current = null;
+      const next = stepBoss(boss.current, held.current, BOSS_TICK_MS / 1000, geometry.current.world);
+      if (next !== boss.current) moveBoss(next);
+      if (held.current !== 0 || next.target !== null) bossTimer.current = setTimeout(tick, BOSS_TICK_MS);
+    };
+    bossTimer.current = setTimeout(tick, BOSS_TICK_MS);
+  };
+  useEffect(() => () => void (bossTimer.current && clearTimeout(bossTimer.current)), []);
 
   // Dialogue and quest log. The town tells the daemon while it has focus, so permission prompts wait for it.
   const [open, setOpen] = useState<string | null>(null);
@@ -177,17 +207,29 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     return true;
   };
 
-  // Keys: arrows pan, Home re-sorts and goes to the left end, F11 toggles full screen, Tab and Q talk.
-  // The dialogue box handles its own keys (Esc, menu arrows) while it is open.
-  const keys = useRef({ pan, home, nextWaiting, boxOpen: false, questsOpen });
-  keys.current = { pan, home, nextWaiting, boxOpen: !!openSession, questsOpen };
+  // Keys: arrows walk the boss, Enter talks to the worker beside it, Home re-sorts and goes to the left end,
+  // F11 toggles full screen, Tab and Q talk. The dialogue box handles its own keys (Esc, menu arrows) while open.
+  const talkNearBoss = () => {
+    const near = nearestWorker(lots, boss.current.x);
+    if (!near) return false;
+    talkTo(near.session.id);
+    return true;
+  };
+  const keys = useRef({ home, nextWaiting, talkNearBoss, runBoss, boxOpen: false, questsOpen });
+  keys.current = { home, nextWaiting, talkNearBoss, runBoss, boxOpen: !!openSession, questsOpen };
   useEffect(() => {
+    const onUp = (e: KeyboardEvent) => {
+      if ((e.key === 'ArrowLeft' && held.current === -1) || (e.key === 'ArrowRight' && held.current === 1)) held.current = 0;
+    };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
       const k = keys.current;
-      if (e.key === 'ArrowLeft' && !k.boxOpen) k.pan(-ARROW_PAN);
-      else if (e.key === 'ArrowRight' && !k.boxOpen) k.pan(ARROW_PAN);
-      else if (e.key === 'Home') k.home();
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !k.boxOpen) {
+        held.current = e.key === 'ArrowLeft' ? -1 : 1;
+        k.runBoss();
+      } else if (e.key === 'Enter' && !k.boxOpen && !k.questsOpen) {
+        if (!k.talkNearBoss()) return;
+      } else if (e.key === 'Home') k.home();
       else if (e.key === 'F11') postFullscreen();
       // Tab stays normal keyboard navigation when nobody needs the user.
       else if (e.key === 'Tab') {
@@ -201,7 +243,12 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', () => (held.current = 0));
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onUp);
+    };
   }, []);
 
   // Drag to pan; a press and release within CLICK_SLOP_PX is a click on a worker.
@@ -224,7 +271,12 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     if (!d || d.moved || e.type !== 'pointerup') return;
     const rect = e.currentTarget.getBoundingClientRect();
     const hit = workerAt(lots, (e.clientX - rect.left) / zoom + camX, (e.clientY - rect.top) / zoom);
-    if (hit) talkTo(hit.session.id);
+    if (hit) {
+      // The box opens at once; the boss runs over in the background.
+      talkTo(hit.session.id);
+      boss.current = { ...boss.current, target: workerSpot(hit.lot, hit.index, hit.session.state)[0] - 10 };
+      runBoss();
+    }
   };
   const onPointerEnter = () => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
@@ -245,8 +297,8 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
     for (const [name, l] of Object.entries(progress?.repos ?? {})) out['project:' + name.toLowerCase()] = l.level;
     return out;
   }, [progress]);
-  const frameInput = useRef({ lots, camX, viewW, levels });
-  frameInput.current = { lots, camX, viewW, levels };
+  const frameInput = useRef({ lots, camX, viewW, levels, bossX });
+  frameInput.current = { lots, camX, viewW, levels, bossX };
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -268,7 +320,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       if (!reduced) phase = (phase + dt / DAY_CYCLE_S) % 1;
       const f = frameInput.current;
       scene.update(f.lots, dt, t, f.levels);
-      scene.draw(ctx, { lots: f.lots, camX: f.camX, viewW: f.viewW, now: t, phase, reducedMotion: reduced, levels: f.levels });
+      scene.draw(ctx, { lots: f.lots, camX: f.camX, viewW: f.viewW, now: t, phase, reducedMotion: reduced, levels: f.levels, boss: f.bossX });
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -306,6 +358,7 @@ export function TownView({ onLeave, openRequest }: { onLeave: () => void; openRe
       <div
         ref={stageRef}
         className={`town-stage${openSession ? ' town-dim' : ''}`}
+        data-boss-x={Math.round(bossX)}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

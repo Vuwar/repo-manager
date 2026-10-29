@@ -23,6 +23,8 @@ export interface TownFrame {
   reducedMotion: boolean;
   /** Repo level by lot key ("project:<name>"); missing means level 1. Buildings grow with it. */
   levels?: Record<string, number>;
+  /** The boss's x on the street (scene px); not drawn when missing. */
+  boss?: number;
 }
 
 export const STATE_COLOR: Record<AgentState, string> = {
@@ -37,6 +39,8 @@ export const FLOWER_COLOR = '#ff6fa8';
 export const FLAG_COLOR = '#e5484d';
 /** Walking speed (scene px per second), and how far and how long a leaving worker walks before it is gone. */
 const WALK_SPEED = 38;
+/** The boss stands on the road, in front of the workers (matches boss.ts BOSS_Y). */
+const BOSS_DRAW_Y = 166;
 const ARRIVE_FROM = 30;
 const LEAVE_DISTANCE = 40;
 const LEAVE_MS = 1500;
@@ -286,6 +290,7 @@ export class TownScene {
         if (!drawn.has(w.id)) workers.push({ w, spot: workerSpot(i, k, w.state) });
       });
     workers.sort((a, b) => a.spot[1] - b.spot[1]).forEach(({ w, spot }) => this.drawWorker(w, spot, f.now, f.reducedMotion));
+    if (f.boss !== undefined) this.drawBoss(f.boss, BOSS_DRAW_Y);
     for (let i = first; i <= last; i++) this.drawLit(f.lots[i], i, f.now);
     this.drawLamps(first, last, L);
     this.drawParticles(x0, x1);
@@ -531,6 +536,17 @@ export class TownScene {
       const bounce = st === 'waiting' && !still ? Math.round(Math.abs(Math.sin(t * 5)) * 2) : 0;
       this.bubble(x, y - 23 - bounce, st);
     }
+  }
+
+  /** The user's character: a purple coat and a gold crown, a little taller than the workers. */
+  private drawBoss(x: number, y: number): void {
+    const coat = this.C('#6c4ab6'), crown = '#ffd36b', skin = this.C(SKIN), pants = this.C(PANTS);
+    this.alpha(0.3); this.R(x - 4, y, 9, 1, '#000000'); this.alpha(1);
+    this.R(x - 2, y - 3, 2, 3, pants); this.R(x + 1, y - 3, 2, 3, pants);
+    this.R(x - 3, y - 8, 7, 5, coat); this.R(x - 4, y - 7, 1, 3, coat); this.R(x + 4, y - 7, 1, 3, coat);
+    this.R(x - 2, y - 12, 5, 4, skin);
+    this.R(x - 1, y - 10, 1, 1, EYE); this.R(x + 1, y - 10, 1, 1, EYE);
+    this.R(x - 2, y - 14, 5, 2, crown); this.R(x - 2, y - 15, 1, 1, crown); this.R(x, y - 15, 1, 1, crown); this.R(x + 2, y - 15, 1, 1, crown);
   }
 
   private bubble(cx: number, y: number, kind: AgentState): void {
